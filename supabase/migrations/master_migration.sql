@@ -28,6 +28,7 @@ BEGIN
     ('slots',       'trg_after_slot_insert'),
     ('ports',       'trg_ports_updated_at'),
     ('cables_fibre','trg_cables_fibre_insert'),
+    ('cables_fibre','trg_cables_fibre_update'),
     ('services',    'trg_service_capacity'),
     ('services',    'trg_service_cid')
   LOOP
@@ -156,8 +157,7 @@ CREATE TABLE public.odfs (
   id             TEXT PRIMARY KEY,
   rack_id        TEXT NOT NULL REFERENCES public.racks(id) ON DELETE CASCADE,
   name           TEXT NOT NULL,
-  odf_type       TEXT NOT NULL DEFAULT 'EXTERNE'
-                   CHECK (odf_type IN ('EXTERNE','INTERNE')),
+  odf_type       TEXT CHECK (odf_type IN ('EXTERNE','INTERNE')),
   is_active      BOOLEAN NOT NULL DEFAULT FALSE,
   odf_number     TEXT,
   route          TEXT,
@@ -313,9 +313,31 @@ CREATE TRIGGER trg_ports_updated_at
 -- ───────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION fn_auto_port_actif()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_odf_type TEXT;
 BEGIN
+  -- 1. Mettre les ports en OCCUPE
   UPDATE public.ports SET statut = 'OCCUPE', updated_at = NOW()
   WHERE id IN (NEW.port_source_id, NEW.port_dest_id);
+
+  -- 2. Déterminer le type d'ODF à propager
+  IF NEW.type_lien = 'EXTERNE' THEN
+    v_odf_type := 'EXTERNE';
+  ELSIF NEW.type_lien IN ('INTERNE', 'JARRETIERE') THEN
+    v_odf_type := 'INTERNE';
+  ELSE
+    v_odf_type := NULL;
+  END IF;
+
+  -- 3. Propager le type de lien aux ODFs correspondants
+  IF v_odf_type IS NOT NULL THEN
+    UPDATE public.odfs
+    SET odf_type = v_odf_type
+    WHERE id IN (
+      SELECT odf_id FROM public.ports WHERE id IN (NEW.port_source_id, NEW.port_dest_id)
+    );
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -323,6 +345,37 @@ $$;
 CREATE TRIGGER trg_cables_fibre_insert
   AFTER INSERT ON public.cables_fibre
   FOR EACH ROW EXECUTE FUNCTION fn_auto_port_actif();
+
+CREATE OR REPLACE FUNCTION fn_auto_port_actif_update()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_odf_type TEXT;
+BEGIN
+  -- Si le type de lien ou les ports ont changé, on le propage aux ODFs
+  IF NEW.type_lien IS DISTINCT FROM OLD.type_lien OR NEW.port_source_id IS DISTINCT FROM OLD.port_source_id OR NEW.port_dest_id IS DISTINCT FROM OLD.port_dest_id THEN
+    IF NEW.type_lien = 'EXTERNE' THEN
+      v_odf_type := 'EXTERNE';
+    ELSIF NEW.type_lien IN ('INTERNE', 'JARRETIERE') THEN
+      v_odf_type := 'INTERNE';
+    ELSE
+      v_odf_type := NULL;
+    END IF;
+
+    IF v_odf_type IS NOT NULL THEN
+      UPDATE public.odfs
+      SET odf_type = v_odf_type
+      WHERE id IN (
+        SELECT odf_id FROM public.ports WHERE id IN (NEW.port_source_id, NEW.port_dest_id)
+      );
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_cables_fibre_update
+  AFTER UPDATE ON public.cables_fibre
+  FOR EACH ROW EXECUTE FUNCTION fn_auto_port_actif_update();
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 5. TRIGGERS : génération automatique en cascade
@@ -368,12 +421,11 @@ CREATE TRIGGER trg_after_odf_insert
   AFTER INSERT ON public.odfs
   FOR EACH ROW EXECUTE FUNCTION fn_after_odf_insert();
 
--- 5c. Rack → ODF1  (cascade → slot via 5b → ports via 5a)
 CREATE OR REPLACE FUNCTION fn_after_rack_insert()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
   INSERT INTO public.odfs (id, rack_id, name, odf_type)
-  VALUES (NEW.id || '-ODF1', NEW.id, 'ODF1', 'EXTERNE')
+  VALUES (NEW.id || '-ODF1', NEW.id, 'ODF1', NULL)
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;

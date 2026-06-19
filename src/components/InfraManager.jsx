@@ -73,7 +73,7 @@ export default function InfraManage({ t, TH }) {
       else if (tab === "odfs") {
         if (!form.rack_id || !form.name) return;
         const id = `${form.rack_id}-${form.name.trim().toUpperCase()}`;
-        const { error: e } = await createOdf({ id, rack_id: form.rack_id, name: form.name, odf_type: form.odf_type || "EXTERNE", route: form.route || "" });
+        const { error: e } = await createOdf({ id, rack_id: form.rack_id, name: form.name, odf_type: null, route: form.route || "" });
         if (e) { setError(e.message); return; }
       }
       else if (tab === "slots") {
@@ -187,7 +187,6 @@ export default function InfraManage({ t, TH }) {
             return { value: r.id, label: `${r.name} — ${r.id}  🏢 ${salle?.name || r.salle_id || "—"}` };
           }))}
       {inp("Nom ODF (ex: ODF2)", "name", "ODF2")}
-      {sel("Type", "odf_type", [{ value: "EXTERNE", label: "EXTERNE" }, { value: "INTERNE", label: "INTERNE (iODF)" }])}
       {inp("Route / Description", "route")}
       <div style={{ padding: "8px 12px", background: "rgba(16,185,129,0.08)", borderRadius: 8, fontSize: 11, color: TH.text2 }}>
         ✨ Auto-crée : Slot S01 → 12 ports
@@ -228,7 +227,8 @@ export default function InfraManage({ t, TH }) {
     if (tab === "odfs") {
       const rack = racks.find(r => r.id === row.rack_id);
       const salle = salles.find(s => s.id === rack?.salle_id);
-      return <>{badge(row.odf_type || "EXTERNE", row.odf_type === "INTERNE" ? "#A78BFA" : "#3B82F6")} <strong style={{ color: TH.text1 }}>{row.name || row.id}</strong> <span style={{ color: TH.text3, fontSize: 11 }}>🏢 {salle?.name || rack?.salle_id || "—"} / {row.route || row.rack_id}</span></>;
+      const typeColor = row.odf_type === "INTERNE" ? "#A78BFA" : row.odf_type === "EXTERNE" ? "#3B82F6" : "#9CA3AF";
+      return <>{badge(row.odf_type || "NON CONFIGURÉ", typeColor)} <strong style={{ color: TH.text1 }}>{row.name || row.id}</strong> <span style={{ color: TH.text3, fontSize: 11 }}>🏢 {salle?.name || rack?.salle_id || "—"} / {row.route || row.rack_id}</span></>;
     }
     if (tab === "slots") {
       const odf = odfs.find(o => o.id === row.odf_id);

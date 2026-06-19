@@ -222,7 +222,6 @@ function OdfsCRUD({ t, TH }) {
   const [items, setItems] = useState([]);
   const [racks, setRacks] = useState([]);
   const [selRack, setSelRack] = useState("");
-  const [addType, setAddType] = useState("EXTERNE");
 
   useEffect(() => { getRacks().then(r => setRacks(r.data || [])); }, []);
   const load = () => getOdfs(selRack || null).then(r => setItems(r.data || []));
@@ -240,7 +239,7 @@ function OdfsCRUD({ t, TH }) {
           return;
         }
         const odfName = name.toUpperCase();
-        createOdf({ id: `${selRack}-${odfName}`, rack_id: selRack, name: odfName, odf_type: addType }).then(res => {
+        createOdf({ id: `${selRack}-${odfName}`, rack_id: selRack, name: odfName, odf_type: null }).then(res => {
           if (res.error) alert("Erreur lors de la création de l'ODF: " + res.error.message);
           else load();
         });
@@ -257,12 +256,12 @@ function OdfsCRUD({ t, TH }) {
           <span className="font-mono" style={{ color: TH.text1, fontSize: "13px", fontWeight: 600 }}>{item.name}</span>
           <span style={{ color: TH.text3, fontSize: "11px" }}>{item.id}</span>
           <span style={{
-            background: item.odf_type === "EXTERNE" ? "rgba(59,130,246,.15)" : "rgba(167,139,250,.15)",
-            color: item.odf_type === "EXTERNE" ? "#3B82F6" : "#A78BFA",
-            border: `1px solid ${item.odf_type === "EXTERNE" ? "rgba(59,130,246,.3)" : "rgba(167,139,250,.3)"}`,
+            background: item.odf_type === "EXTERNE" ? "rgba(59,130,246,.15)" : item.odf_type === "INTERNE" ? "rgba(167,139,250,.15)" : "rgba(156,163,175,.15)",
+            color: item.odf_type === "EXTERNE" ? "#3B82F6" : item.odf_type === "INTERNE" ? "#A78BFA" : "#9CA3AF",
+            border: `1px solid ${item.odf_type === "EXTERNE" ? "rgba(59,130,246,.3)" : item.odf_type === "INTERNE" ? "rgba(167,139,250,.3)" : "rgba(156,163,175,.3)"}`,
             borderRadius: "6px", padding: "1px 7px", fontSize: "10px", fontWeight: 600
           }}>
-            {item.odf_type || "EXTERNE"}
+            {item.odf_type || "NON CONFIGURÉ"}
           </span>
         </div>
       )}
@@ -274,21 +273,6 @@ function OdfsCRUD({ t, TH }) {
             style={{ background: TH.bgInput, border: `1px solid ${TH.border}`, borderRadius: "8px", padding: "7px 10px", color: TH.text1, fontSize: "12px" }}>
             <option value="">Tous racks</option>
             {racks.map(r => <option key={r.id} value={r.id}>{r.name} — {r.id}</option>)}
-          </select>
-          <select 
-            value={addType} 
-            onChange={e => setAddType(e.target.value)}
-            style={{
-              background: TH.bgInput,
-              border: `1px solid ${TH.border}`,
-              borderRadius: "8px",
-              padding: "7px 10px",
-              color: addType === "INTERNE" ? TH.purple || "#A78BFA" : TH.text1,
-              fontSize: "12px",
-              fontWeight: 600
-            }}>
-            <option value="EXTERNE">Type : EXTERNE</option>
-            <option value="INTERNE">Type : INTERNE (iODF)</option>
           </select>
         </>
       } 
