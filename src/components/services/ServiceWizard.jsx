@@ -333,8 +333,11 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
     setStep("CONFIRM");
   };
 
-  const getOrCreateTransitJar = async (siteTransit, p1, p2, typeLien = 'INTERNE') => {
-    const prefix = 'INT';
+  const getOrCreateTransitJar = async (siteTransit, p1, p2, typeLien = 'JARRETIERE') => {
+    // Sécurité : ne jamais insérer une jarretière où source = destination
+    if (!p1 || !p2 || p1 === p2) return null;
+
+    const prefix = 'JAR';
     const jarRef = `${prefix}-${siteTransit}-${p1.split('_').pop()}-${p2.split('_').pop()}`;
     const nom = `Câble interne ${siteTransit} : ${p1.split('_').pop()} ↔ ${p2.split('_').pop()}`;
 
@@ -389,7 +392,7 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
         : {};
 
       const linkType = (pa, pb) => {
-        return 'INTERNE';
+        return 'JARRETIERE';
       };
 
       const cid = genCid();
@@ -408,33 +411,45 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
           const siteTransit = hop.siteFrom || pathSites[i];
 
           if (portTransitIn && portTransitMid && hop.portEntree) {
-            const type1 = linkType(portTransitIn, portTransitMid);
-            const jar1Id = await getOrCreateTransitJar(siteTransit, portTransitIn, portTransitMid, type1);
-            jonctions.push({
-              ordre: ordre++,
-              cable_id: jar1Id,
-              port_entree_id: portTransitIn,
-              port_sortie_id: portTransitMid,
-            });
+            // Jarretière 1 : port d'arrivée → port de brassage interne
+            if (portTransitIn !== portTransitMid) {
+              const type1 = linkType(portTransitIn, portTransitMid);
+              const jar1Id = await getOrCreateTransitJar(siteTransit, portTransitIn, portTransitMid, type1);
+              if (jar1Id) {
+                jonctions.push({
+                  ordre: ordre++,
+                  cable_id: jar1Id,
+                  port_entree_id: portTransitIn,
+                  port_sortie_id: portTransitMid,
+                });
+              }
+            }
 
-            const type2 = linkType(portTransitMid, hop.portEntree);
-            const jar2Id = await getOrCreateTransitJar(siteTransit, portTransitMid, hop.portEntree, type2);
-            jonctions.push({
-              ordre: ordre++,
-              cable_id: jar2Id,
-              port_entree_id: portTransitMid,
-              port_sortie_id: hop.portEntree,
-            });
+            // Jarretière 2 : port de brassage interne → port de départ vers site suivant
+            if (portTransitMid !== hop.portEntree) {
+              const type2 = linkType(portTransitMid, hop.portEntree);
+              const jar2Id = await getOrCreateTransitJar(siteTransit, portTransitMid, hop.portEntree, type2);
+              if (jar2Id) {
+                jonctions.push({
+                  ordre: ordre++,
+                  cable_id: jar2Id,
+                  port_entree_id: portTransitMid,
+                  port_sortie_id: hop.portEntree,
+                });
+              }
+            }
           } else if (portTransitIn && !portTransitMid && portTransitIn !== hop.portEntree) {
             if (portTransitIn && hop.portEntree) {
               const typeF = linkType(portTransitIn, hop.portEntree);
               const jarId = await getOrCreateTransitJar(siteTransit, portTransitIn, hop.portEntree, typeF);
-              jonctions.push({
-                ordre: ordre++,
-                cable_id: jarId,
-                port_entree_id: portTransitIn,
-                port_sortie_id: hop.portEntree,
-              });
+              if (jarId) {
+                jonctions.push({
+                  ordre: ordre++,
+                  cable_id: jarId,
+                  port_entree_id: portTransitIn,
+                  port_sortie_id: hop.portEntree,
+                });
+              }
             }
           }
         }

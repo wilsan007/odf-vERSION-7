@@ -843,17 +843,17 @@ UPDATE public.ports SET cid='DJT-06062026043300', ot_num='700', capacite='40G', 
 INSERT INTO public.cables_fibre
   (id, cable_reference, nom, fournisseur_id, type_fibre, nombre_fibres, route,
    capacite_totale_gbps, capacite_disponible_gbps, port_source_id) VALUES
-  ('CBL-SEACOM-01', 'CBL-ALP-SEACOM-01', 'Site Alpha ↔ SEACOM', 'SEACOM', 'Monomode', 144, 'Site Alpha → SEACOM', 400, 400, 'ALP-S1-R1-ODF1_S01P05'),
-  ('CBL-AAE1-01',   'CBL-ALP-AAE1-01',   'Site Alpha ↔ AAE1',   'AAE1',   'Monomode', 96,  'Site Alpha → AAE1',   300, 300, 'ALP-S1-R1-ODF1_S01P06'),
-  ('CBL-WIOCC-01',  'CBL-ALP-WIOCC-01',  'Site Alpha ↔ DEL',    'WIOCC',  'Monomode', 48,  'Site Alpha → DEL',    200, 200, 'ALP-S1-R1-ODF2_S01P01')
+  ('CBL-ALP-SEA-01', 'CBL-ALP-SEA-01', 'Liaison ALP-SEA Fibre 01', 'SEACOM', 'Monomode', 144, 'Site Alpha → SEACOM', 400, 400, 'ALP-S1-R1-ODF1_S01P05'),
+  ('CBL-ALP-AAE-01', 'CBL-ALP-AAE-01', 'Liaison ALP-AAE Fibre 01', 'AAE1',   'Monomode', 96,  'Site Alpha → AAE1',   300, 300, 'ALP-S1-R1-ODF1_S01P06'),
+  ('CBL-ALP-DEL-01', 'CBL-ALP-DEL-01', 'Liaison ALP-DEL Fibre 01', 'WIOCC',  'Monomode', 48,  'Site Alpha → DEL',    200, 200, 'ALP-S1-R1-ODF2_S01P01')
 ON CONFLICT (id) DO NOTHING;
 
 -- Lier les ODFs et ports concernés aux câbles physiques (FK)
-UPDATE public.odfs  SET cable_id = 'CBL-SEACOM-01' WHERE id = 'ALP-S1-R1-ODF1';
-UPDATE public.odfs  SET cable_id = 'CBL-WIOCC-01'  WHERE id = 'ALP-S1-R1-ODF2';
-UPDATE public.ports SET cable_id = 'CBL-SEACOM-01' WHERE id = 'ALP-S1-R1-ODF1_S01P05';
-UPDATE public.ports SET cable_id = 'CBL-AAE1-01'   WHERE id = 'ALP-S1-R1-ODF1_S01P06';
-UPDATE public.ports SET cable_id = 'CBL-WIOCC-01'  WHERE id = 'ALP-S1-R1-ODF2_S01P01';
+UPDATE public.odfs  SET cable_id = 'CBL-ALP-SEA-01' WHERE id = 'ALP-S1-R1-ODF1';
+UPDATE public.odfs  SET cable_id = 'CBL-ALP-DEL-01'  WHERE id = 'ALP-S1-R1-ODF2';
+UPDATE public.ports SET cable_id = 'CBL-ALP-SEA-01' WHERE id = 'ALP-S1-R1-ODF1_S01P05';
+UPDATE public.ports SET cable_id = 'CBL-ALP-AAE-01'   WHERE id = 'ALP-S1-R1-ODF1_S01P06';
+UPDATE public.ports SET cable_id = 'CBL-ALP-DEL-01'  WHERE id = 'ALP-S1-R1-ODF2_S01P01';
 
 -- Liens de routage pour la démo multi-sites (ALP → BET → GAM)
 --   2 liens EXTERNE (porteurs de capacité) + 1 JARRETIERE interne à BET (capacité 0)
@@ -876,9 +876,9 @@ ON CONFLICT (id) DO NOTHING;
 -- ───────────────────────────────────────────────────────────────────────────
 INSERT INTO public.services
   (id, label, cable_id, client_id, fournisseur_id, port_id, capacite_gbps, cid, ot_num, statut) VALUES
-  ('SVC-0001', 'Transit IP SEACOM 100G', 'CBL-SEACOM-01', 'MTN',    'SEACOM', 'ALP-S1-R1-ODF1_S01P05', 100, 'DJT-22072025091210', '615', 'ACTIF'),
-  ('SVC-0002', 'Capacité AAE1 100G',     'CBL-AAE1-01',   'VF',     'AAE1',   'ALP-S1-R1-ODF1_S01P06', 100, 'DJT-18092025114423', '621', 'ACTIF'),
-  ('SVC-0003', 'Liaison DEL 10G',        'CBL-WIOCC-01',  'AIRTEL', 'WIOCC',  'ALP-S1-R1-ODF2_S01P01', 10,  'DJT-03122024085532', '554', 'ACTIF')
+  ('SVC-0001', 'Transit IP SEACOM 100G', 'CBL-ALP-SEA-01', 'MTN',    'SEACOM', 'ALP-S1-R1-ODF1_S01P05', 100, 'DJT-22072025091210', '615', 'ACTIF'),
+  ('SVC-0002', 'Capacité AAE1 100G',     'CBL-ALP-AAE-01',   'VF',     'AAE1',   'ALP-S1-R1-ODF1_S01P06', 100, 'DJT-18092025114423', '621', 'ACTIF'),
+  ('SVC-0003', 'Liaison DEL 10G',        'CBL-ALP-DEL-01',  'AIRTEL', 'WIOCC',  'ALP-S1-R1-ODF2_S01P01', 10,  'DJT-03122024085532', '554', 'ACTIF')
 ON CONFLICT (id) DO NOTHING;
 
 -- ───────────────────────────────────────────────────────────────────────────
