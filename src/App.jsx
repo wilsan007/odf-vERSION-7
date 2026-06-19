@@ -98,7 +98,7 @@ export default function App() {
     search: <SearchView t={t} TH={TH} />,
     manage: <ManageInfra t={t} TH={TH} />,
     odfConnect: <OdfConnectView t={t} TH={TH} />,
-    services: <ServicesView t={t} TH={TH} />,
+    services: <ServicesView t={t} TH={TH} user={session?.user || demoUser} />,
   };
 
   const VIEW_TITLES = {

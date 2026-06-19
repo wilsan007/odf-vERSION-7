@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { supabase, getServices, getServiceRoutes, getCablesInterSites, getClients, getFournisseurs, getSites, deleteService } from "../supabase.js";
-import { Btn, Confirm, Spinner } from "./common/UI.jsx";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { supabase, getServices, getServiceRoutes, getCablesInterSites, getClients, getFournisseurs, getSites, addHistory } from "../supabase.js";
+import { Btn, Inp, Sel, Spinner } from "./common/UI.jsx";
 
 // Import extracted components
 import { ServiceCard } from "./services/ServiceCard.jsx";
 import { ServiceWizard } from "./services/ServiceWizard.jsx";
 import { ServiceEditModal } from "./services/ServiceEditModal.jsx";
+import { ServiceDetailModal } from "./services/ServiceDetailModal.jsx";
 import { PortPicker } from "./services/PortPicker.jsx";
 
 // Re-export PortPicker for backward compatibility
@@ -14,12 +15,20 @@ export { PortPicker };
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN SERVICES VIEW
 // ═══════════════════════════════════════════════════════════════════════════
-export default function ServicesView({ t, TH }) {
+export default function ServicesView({ t, TH, user }) {
+  const userLabel = user?.email || user?.name || "système";
+
   const [services, setServices] = useState([]);
   const [routes, setRoutes] = useState({});
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
-  const [confirm, setConfirm] = useState(null);
+  const [selectedService, setSelectedService] = useState(null);
+
+  // Filtres
+  const [search, setSearch] = useState("");
+  const [filterClient, setFilterClient] = useState("");
+  const [filterCable, setFilterCable] = useState("");
+  const [filterCapacite, setFilterCapacite] = useState("");
 
   // Edit state
   const [editingService, setEditingService] = useState(null);
@@ -55,18 +64,31 @@ export default function ServicesView({ t, TH }) {
     getSites().then(r => setSitesList(r.data || []));
   }, [load]);
 
-  const doDelete = async (id) => {
-    try {
-      const { data: svc } = await supabase.from('services').select('cid').eq('id', id).single();
-      await deleteService(id);
-      if (svc && svc.cid) {
-        await supabase.from('ports').update({ statut: 'LIBRE', cid: null }).eq('cid', svc.cid);
+  // Options de filtre dérivées des services chargés (pas de requête supplémentaire)
+  const cableOptions = useMemo(() => {
+    const seen = new Map();
+    services.forEach(s => {
+      if (s.cable_id && !seen.has(s.cable_id)) {
+        seen.set(s.cable_id, s.cables_fibre?.cable_reference || s.cable_id);
       }
-    } catch (e) {
-      console.error("Erreur de suppression service :", e);
-    }
-    setConfirm(null);
-    load();
+    });
+    return [...seen.entries()].map(([id, label]) => ({ id, label }));
+  }, [services]);
+
+  const capaciteOptions = useMemo(() => (
+    [...new Set(services.map(s => s.capacite_gbps).filter(c => c != null))].sort((a, b) => a - b)
+  ), [services]);
+
+  const filteredServices = useMemo(() => services.filter(s => {
+    if (search && !((s.cid || s.id || "").toLowerCase().includes(search.trim().toLowerCase()))) return false;
+    if (filterClient && s.client_id !== filterClient) return false;
+    if (filterCable && s.cable_id !== filterCable) return false;
+    if (filterCapacite && String(s.capacite_gbps) !== filterCapacite) return false;
+    return true;
+  }), [services, search, filterClient, filterCable, filterCapacite]);
+
+  const resetFilters = () => {
+    setSearch(""); setFilterClient(""); setFilterCable(""); setFilterCapacite("");
   };
 
   const startEdit = (s) => {
@@ -75,6 +97,26 @@ export default function ServicesView({ t, TH }) {
     setEditClient(s.client_id || "");
     setEditFourn(s.fournisseur_id || "");
     setEditStatut(s.statut || "ACTIF");
+  };
+
+  const toggleStatut = async (s) => {
+    const newStatut = (s.statut || "ACTIF") === "ACTIF" ? "SUSPENDU" : "ACTIF";
+    try {
+      const { error } = await supabase.from('services')
+        .update({ statut: newStatut, updated_by: userLabel })
+        .eq('id', s.id);
+      if (error) throw error;
+
+      await addHistory({
+        action: `Service ${newStatut === "ACTIF" ? "activé" : "désactivé"} : ${s.cid || s.id} — ${s.label}`,
+        entity_type: 'service', entity_id: s.id, user_email: userLabel
+      });
+
+      setSelectedService(null);
+      load();
+    } catch (e) {
+      alert("Erreur : " + e.message);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -88,10 +130,16 @@ export default function ServicesView({ t, TH }) {
         label: editLabel.trim(),
         client_id: editClient || null,
         fournisseur_id: editFourn || null,
-        statut: editStatut
+        statut: editStatut,
+        updated_by: userLabel
       }).eq('id', editingService.id);
 
       if (error) throw error;
+
+      await addHistory({
+        action: `Service modifié : ${cid} — ${editLabel.trim()}`,
+        entity_type: 'service', entity_id: editingService.id, user_email: userLabel
+      });
 
       if (oldStatut !== "RESILIE" && newStatut === "RESILIE") {
         await supabase.from('ports').update({ statut: 'LIBRE', cid: null }).eq('cid', cid);
@@ -108,6 +156,7 @@ export default function ServicesView({ t, TH }) {
       }
 
       setEditingService(null);
+      setSelectedService(null);
       load();
     } catch (e) {
       alert("Erreur de modification : " + e.message);
@@ -125,22 +174,39 @@ export default function ServicesView({ t, TH }) {
   return (
     <div style={{ height: "100%", overflowY: "auto", padding: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <div style={{ color: TH.text2, fontSize: "12px" }}>{services.length} service(s)</div>
+        <div style={{ color: TH.text2, fontSize: "12px" }}>{filteredServices.length} / {services.length} service(s)</div>
         <Btn onClick={() => setShowWizard(true)} TH={TH}>+ {t.add} service</Btn>
       </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr auto", gap: "10px", marginBottom: "16px" }}>
+        <Inp value={search} onChange={setSearch} placeholder="Rechercher par CID…" TH={TH} />
+        <Sel value={filterClient} onChange={setFilterClient} TH={TH}>
+          <option value="">Tous les clients</option>
+          {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+        </Sel>
+        <Sel value={filterCable} onChange={setFilterCable} TH={TH}>
+          <option value="">Toutes les sources</option>
+          {cableOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </Sel>
+        <Sel value={filterCapacite} onChange={setFilterCapacite} TH={TH}>
+          <option value="">Toutes les capacités</option>
+          {capaciteOptions.map(c => <option key={c} value={c}>{c} Gbps</option>)}
+        </Sel>
+        <Btn variant="ghost" onClick={resetFilters} TH={TH}>Réinitialiser</Btn>
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        {services.map(s => (
+        {filteredServices.map(s => (
           <ServiceCard
             key={s.id}
             service={s}
-            routeInfo={routes[s.id]}
+            onSelect={setSelectedService}
             onEdit={startEdit}
-            onDelete={setConfirm}
+            onToggleStatut={toggleStatut}
             TH={TH}
           />
         ))}
-        {!services.length && (
+        {!filteredServices.length && (
           <div style={{ textAlign: "center", color: TH.text3, paddingTop: "40px" }}>{t.noData}</div>
         )}
       </div>
@@ -153,18 +219,10 @@ export default function ServicesView({ t, TH }) {
         cables={cablesInterSites}
         fournisseurs={fournisseurs}
         clients={clients}
+        userLabel={userLabel}
         TH={TH}
         t={t}
       />
-
-      {confirm && (
-        <Confirm
-          message={t.confirmDelete}
-          onYes={() => doDelete(confirm)}
-          onNo={() => setConfirm(null)}
-          TH={TH} t={t}
-        />
-      )}
 
       <ServiceEditModal
         editingService={editingService}
@@ -176,6 +234,13 @@ export default function ServicesView({ t, TH }) {
         fournisseurs={fournisseurs}
         onClose={() => setEditingService(null)}
         onSave={handleSaveEdit}
+        TH={TH}
+      />
+
+      <ServiceDetailModal
+        service={selectedService}
+        routeInfo={selectedService ? routes[selectedService.id] : null}
+        onClose={() => setSelectedService(null)}
         TH={TH}
       />
     </div>
