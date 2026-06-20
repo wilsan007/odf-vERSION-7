@@ -94,7 +94,7 @@ export default function App() {
   }
 
   const VIEWS = {
-    dashboard: <Dashboard1234 t={t} TH={TH} />,
+    dashboard1234: <Dashboard1234 t={t} TH={TH} />,
     search: <SearchView t={t} TH={TH} />,
     manage: <ManageInfra t={t} TH={TH} />,
     odfConnect: <OdfConnectView t={t} TH={TH} />,
@@ -102,7 +102,7 @@ export default function App() {
   };
 
   const VIEW_TITLES = {
-    dashboard: t.dashboard,
+    dashboard1234: t.dashboard,
     search: t.search,
     manage: t.manage,
     odfConnect: t.odfConnect,
