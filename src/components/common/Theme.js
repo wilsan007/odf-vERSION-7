@@ -59,7 +59,7 @@ export const THEMES = {
 // ═══════════════════════════════════════════════════════════════════════════
 export const T = {
   fr: {
-    appName: "ODF Manager", appSub: "Omega Tech · Djibouti Telecom",
+    appName: "ODF Manager", appSub: "Omega Tech &&&· Djibouti Telecom",
     login: "Connexion", logout: "Déconnexion",
     email: "Email", password: "Mot de passe", signin: "Se connecter",
     dashboard: "Tableau de bord", search: "Recherche", searchPlaceholder: "Rechercher…",
