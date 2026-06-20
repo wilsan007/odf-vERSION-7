@@ -102,7 +102,7 @@ export default function App() {
   };
 
   const VIEW_TITLES = {
-    dashboard1234: t.dashboard,
+    dashboard1234: t.dashboard1234,
     search: t.search,
     manage: t.manage,
     odfConnect: t.odfConnect,
