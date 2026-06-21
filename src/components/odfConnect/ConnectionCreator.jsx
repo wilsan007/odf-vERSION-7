@@ -62,7 +62,8 @@ export function ConnectionCreator({
 
   // Auto-générer la référence câble
   useEffect(() => {
-    if (src.site) {
+ //   if (src.site) est remplace par  If (src.site && src.dst){ pour verifier les criteres
+    If (src.site && src.dst){
       const targetSite = mode === "intersalle" ? src.site : dst.site;
       if (targetSite) {
         const type = mode === "externe" ? "CBL" : "JAR";
