@@ -62,12 +62,27 @@ export function ConnectionCreator({
 
   // Auto-générer la référence câble
   useEffect(() => {
+    // ancien code
  //   if (src.site) est remplace par  If (src.site && src.dst){ pour verifier les criteres
-    If (src.site && src.dst){
-      const targetSite = mode === "intersalle" ? src.site : dst.site;
-      if (targetSite) {
-        const type = mode === "externe" ? "CBL" : "JAR";
-        setCableRef(`${type}-${src.site}-${targetSite}-${String(Date.now()).slice(-4)}`);
+     // const targetSite = mode === "intersalle" ? src.site : dst.site;
+      //if (targetSite) {
+        //const type = mode === "externe" ? "CBL" : "JAR";
+    // Nouveau code 
+     If (src.site && src.dst){
+       let  targetSite = src.site;
+        if (mode === "local" ){
+         // const targetSite  = dst.site;
+          const type =    "JAR"
+        } elseif(mode = "intersalle"){
+            const type =  "cJAR" // cable jarretieres
+        }elseif(mode = "externe"){
+            const type  = CBLX
+        }
+         // Mise a jour de cable reference 
+        SetCableRef ('{${type}-${src.site-${target.Site});
+                     }
+          }[srC?.site, dst?.site,mode, setCableRef]);
+       // setCableRef(`${type}-${src.site}-${targetSite}-${String(Date.now()).slice(-4)}`);
       }
     }
   }, [src.site, dst.site, mode]);
