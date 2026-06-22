@@ -70,13 +70,14 @@ export function ConnectionCreator({
     // Nouveau code 
      If (src.site && src.dst){
        let  targetSite = src.site;
-        if (mode === "local" ){
+    //    if (mode === "local" ){
          // const targetSite  = dst.site;
-          const type =    "JAR"
-        } elseif(mode = "intersalle"){
+       !!   const type =    "JAR"
+      //  } else
+       if(mode = "intersalle"){
             const type =  "cJAR" // cable jarretieres
-        }elseif(mode = "externe"){
-            const type  = CBLX
+        } elseif(mode = "externe"){
+            const type  = "CBLX"
         }
          // Mise a jour de cable reference 
         SetCableRef ('{${type}-${src.site-${target.Site});
