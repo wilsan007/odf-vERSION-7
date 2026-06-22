@@ -132,7 +132,7 @@ export function ConnectionCreator({
           const subRef = `${cableRef}-${sSlot.name}`;
           const { error: cabErr } = await createCable({
             cable_reference: subRef,
-            nom: `${src.site} ↔ ${mode === "intersalle" ? src.site : dst.site} (${mode === "externe" ? "EXTERNE" : "INTERNE"})`,
+            nom: `[ODF] ${src.site} ↔ ${mode === "intersalle" ? src.site : dst.site} (${mode === "externe" ? "EXTERNE" : "INTERNE"})`,
             type_lien: typeLien,
             type_fibre: typeFibre,
             nombre_fibres: 12,
