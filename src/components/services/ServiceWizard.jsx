@@ -11,6 +11,43 @@ import { SelectClientStep } from "./wizard/SelectClientStep.jsx";
 import { ConfirmStep } from "./wizard/ConfirmStep.jsx";
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HELPER POUR RESOUDRE LES JARRETIERES DE TRANSIT
+// ═══════════════════════════════════════════════════════════════════════════
+export const resolveJarretieresForHop = (portTransitIn, portTransitMid, portEntree, internalCables) => {
+  if (!portTransitIn || !portTransitMid || !portEntree || !internalCables) {
+    return { j1: null, j2: null };
+  }
+  const slotIn = portTransitIn.split(/P\d+$/)[0];
+  const slotMid = portTransitMid.split(/P\d+$/)[0];
+  const slotOut = portEntree.split(/P\d+$/)[0];
+
+  const j1 = internalCables.find(c => {
+    const sSrc = c.port_source_id ? c.port_source_id.split(/P\d+$/)[0] : null;
+    const sDst = c.port_dest_id ? c.port_dest_id.split(/P\d+$/)[0] : null;
+    return (sSrc === slotIn && sDst === slotMid) || (sSrc === slotMid && sDst === slotIn);
+  });
+
+  const j2 = internalCables.find(c => {
+    const sSrc = c.port_source_id ? c.port_source_id.split(/P\d+$/)[0] : null;
+    const sDst = c.port_dest_id ? c.port_dest_id.split(/P\d+$/)[0] : null;
+    return (sSrc === slotMid && sDst === slotOut) || (sSrc === slotOut && sDst === slotMid);
+  });
+
+  return { j1, j2 };
+};
+
+export const getJarretieresCandidates = (portA, portB, internalCables) => {
+  if (!portA || !portB || !internalCables) return [];
+  const slotA = portA.split(/P\d+$/)[0];
+  const slotB = portB.split(/P\d+$/)[0];
+  return internalCables.filter(c => {
+    const sSrc = c.port_source_id ? c.port_source_id.split(/P\d+$/)[0] : null;
+    const sDst = c.port_dest_id ? c.port_dest_id.split(/P\d+$/)[0] : null;
+    return (sSrc === slotA && sDst === slotB) || (sSrc === slotB && sDst === slotA);
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SERVICE WIZARD
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -36,6 +73,7 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
   const [transitLoading, setTransitLoading] = useState(false);
   const [hopPorts, setHopPorts] = useState([]);
   const [loadingHopPorts, setLoadingHopPorts] = useState(false);
+  const [allInternalCables, setAllInternalCables] = useState([]);
 
   const { findPath, getCablesBetween } = useRouteGraph(cables);
 
@@ -59,6 +97,14 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
       setTransitLoading(false);
       setHopPorts([]);
       setLoadingHopPorts(false);
+      
+      // Charger toutes les jarretières/câbles INTERNES de la base
+      supabase.from('cables_fibre')
+        .select('id, cable_reference, nom, type_lien, port_source_id, port_dest_id')
+        .eq('type_lien', 'INTERNE')
+        .then(r => {
+          setAllInternalCables(r.data || []);
+        });
     }
   }, [open]);
 
@@ -122,7 +168,7 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
       portTransitIn, portEntreeB,
       internalPorts: transitData.internalPorts,
       externalPorts: transitData.externalPorts,
-      jarretieres: transitData.jarretieres,
+      cablesInternes: transitData.cablesInternes,
       cablesExterneB,
     });
     setTransitReco(reco);
@@ -130,6 +176,25 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
       onSelectTransitMid(n, reco[0].portInterne.id);
     }
   }, [hops, transitData, step, pathSites, cables]);
+
+  const resolvedHopsJarretieres = useMemo(() => {
+    return hops.map((hop, idx) => {
+      if (idx === 0) return null;
+      const portTransitIn = hops[idx - 1]?.portSortie || null;
+      const portTransitMid = hop?.portTransitMid || null;
+      const portEntree = hop?.portEntree || null;
+      
+      const { j1: autoJ1, j2: autoJ2 } = resolveJarretieresForHop(portTransitIn, portTransitMid, portEntree, allInternalCables);
+      
+      const j1Candidates = getJarretieresCandidates(portTransitIn, portTransitMid, allInternalCables);
+      const j2Candidates = getJarretieresCandidates(portTransitMid, portEntree, allInternalCables);
+      
+      const j1 = (hop?.selectedJ1Id && j1Candidates.find(c => c.id === hop.selectedJ1Id)) || autoJ1;
+      const j2 = (hop?.selectedJ2Id && j2Candidates.find(c => c.id === hop.selectedJ2Id)) || autoJ2;
+      
+      return { j1, j2 };
+    });
+  }, [hops, allInternalCables]);
 
   const totalHops = pathSites.length > 1 ? pathSites.length - 1 : 0;
   const siteName = (id) => (sites || []).find(s => s.id === id)?.name || id;
@@ -155,6 +220,8 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
       siteFrom: cable.siteSource === pathSites[hopIdx] ? cable.siteSource : cable.siteDest,
       siteTo: cable.siteSource === pathSites[hopIdx] ? cable.siteDest : cable.siteSource,
       cable_reference: cable.cable_reference,
+      selectedJ1Id: null,
+      selectedJ2Id: null,
     };
     setHops(newHops);
   };
@@ -163,7 +230,27 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
     const newHops = [...hops];
     newHops[hopIdx] = {
       ...newHops[hopIdx],
-      portTransitMid: portId
+      portTransitMid: portId,
+      selectedJ1Id: null,
+      selectedJ2Id: null
+    };
+    setHops(newHops);
+  };
+
+  const onSelectJarretiere1 = (hopIdx, j1Id) => {
+    const newHops = [...hops];
+    newHops[hopIdx] = {
+      ...newHops[hopIdx],
+      selectedJ1Id: j1Id
+    };
+    setHops(newHops);
+  };
+
+  const onSelectJarretiere2 = (hopIdx, j2Id) => {
+    const newHops = [...hops];
+    newHops[hopIdx] = {
+      ...newHops[hopIdx],
+      selectedJ2Id: j2Id
     };
     setHops(newHops);
   };
@@ -312,6 +399,21 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
         setErr(`Veuillez sélectionner un port de brassage interne iODF sur le site ${siteName(pathSites[hopIdx])} (étape 3 — connexion locale requise).`);
         return;
       }
+      
+      // Valider que les jarretières d'infrastructure manuelles correspondantes existent
+      const jDetails = resolvedHopsJarretieres[hopIdx];
+      const portTransitMid = hops[hopIdx].portTransitMid;
+      const portEntree = hops[hopIdx].portEntree;
+      
+      const isJ1Required = portTransitInCheck && portTransitMid && portTransitInCheck !== portTransitMid;
+      const isJ2Required = portTransitMid && portEntree && portTransitMid !== portEntree;
+      const isJ1Valid = !isJ1Required || (jDetails && jDetails.j1);
+      const isJ2Valid = !isJ2Required || (jDetails && jDetails.j2);
+      
+      if (!isJ1Valid || !isJ2Valid) {
+        setErr(`Erreur : Les jarretières d'infrastructure requises pour effectuer cette connexion locale n'existent pas dans la base de données. Veuillez d'abord les créer dans "Connexion ODF".`);
+        return;
+      }
     }
     if (hopIdx + 1 < totalHops) {
       setStep(`HOP_${hopIdx + 1}`);
@@ -333,35 +435,6 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
     setStep("CONFIRM");
   };
 
-  const getOrCreateTransitJar = async (siteTransit, p1, p2, typeLien = 'JARRETIERE') => {
-    // Sécurité : ne jamais insérer une jarretière où source = destination
-    if (!p1 || !p2 || p1 === p2) return null;
-
-    const prefix = 'JAR';
-    const jarRef = `${prefix}-${siteTransit}-${p1.split('_').pop()}-${p2.split('_').pop()}`;
-    const nom = `Câble interne ${siteTransit} : ${p1.split('_').pop()} ↔ ${p2.split('_').pop()}`;
-
-    const { data: existingJar } = await supabase.from('cables_fibre')
-      .select('id').eq('cable_reference', jarRef).maybeSingle();
-
-    if (existingJar) {
-      return existingJar.id;
-    }
-
-    const { data: newJar, error: jarErr } = await supabase.from('cables_fibre').insert({
-      cable_reference: jarRef,
-      nom: nom,
-      type_lien: typeLien,
-      port_source_id: p1,
-      port_dest_id: p2,
-      capacite_totale_gbps: 0,
-      capacite_disponible_gbps: 0,
-    }).select('id').single();
-
-    if (jarErr) throw jarErr;
-    return newJar.id;
-  };
-
   const onConfirm = async () => {
     setSaving(true); setErr("");
 
@@ -376,24 +449,21 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
         if (!hops[i]?.portTransitMid) {
           throw new Error(`La connexion locale iODF sur le site de transit ${siteName(pathSites[i])} est manquante (étape ${i + 1}). Sélectionnez un port de brassage interne.`);
         }
-      }
 
-      const transitPortIds = [];
-      for (let i = 1; i < hops.length; i++) {
-        const portIn = hops[i - 1]?.portSortie;
-        const portMid = hops[i]?.portTransitMid;
-        const portOut = hops[i]?.portEntree;
-        if (portIn) transitPortIds.push(portIn);
-        if (portMid) transitPortIds.push(portMid);
-        if (portOut) transitPortIds.push(portOut);
+        // Valider que les jarretières requises existent dans resolvedHopsJarretieres
+        const jDetails = resolvedHopsJarretieres[i];
+        const portTransitMid = hops[i].portTransitMid;
+        const portEntree = hops[i].portEntree;
+        
+        const isJ1Required = portTransitIn && portTransitMid && portTransitIn !== portTransitMid;
+        const isJ2Required = portTransitMid && portEntree && portTransitMid !== portEntree;
+        const isJ1Valid = !isJ1Required || (jDetails && jDetails.j1);
+        const isJ2Valid = !isJ2Required || (jDetails && jDetails.j2);
+        
+        if (!isJ1Valid || !isJ2Valid) {
+          throw new Error(`Les jarretières d'infrastructure requises pour la connexion locale sur le site de transit ${siteName(pathSites[i])} n'existent pas dans la base de données. Veuillez d'abord les créer.`);
+        }
       }
-      const salleMap = transitPortIds.length > 0
-        ? await getSalleIdsForPorts([...new Set(transitPortIds)])
-        : {};
-
-      const linkType = (pa, pb) => {
-        return 'JARRETIERE';
-      };
 
       const cid = genCid();
       const primaryHop = hops[0];
@@ -405,51 +475,31 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
         const hop = hops[i];
         if (!hop || !hop.cableId) continue;
 
+        // ─── Câbles internes de transit (uniquement pour hops intermédiaires i > 0) ───
         if (i > 0) {
           const portTransitIn = hops[i - 1]?.portSortie;
           const portTransitMid = hop.portTransitMid;
-          const siteTransit = hop.siteFrom || pathSites[i];
+          const jDetails = resolvedHopsJarretieres[i];
 
           if (portTransitIn && portTransitMid && hop.portEntree) {
-            // Jarretière 1 : port d'arrivée → port de brassage interne
-            if (portTransitIn !== portTransitMid) {
-              const type1 = linkType(portTransitIn, portTransitMid);
-              const jar1Id = await getOrCreateTransitJar(siteTransit, portTransitIn, portTransitMid, type1);
-              if (jar1Id) {
-                jonctions.push({
-                  ordre: ordre++,
-                  cable_id: jar1Id,
-                  port_entree_id: portTransitIn,
-                  port_sortie_id: portTransitMid,
-                });
-              }
+            // Câble interne 1 : port d'arrivée → port de brassage interne
+            if (portTransitIn !== portTransitMid && jDetails?.j1) {
+              jonctions.push({
+                ordre: ordre++,
+                cable_id: jDetails.j1.id,
+                port_entree_id: portTransitIn,
+                port_sortie_id: portTransitMid,
+              });
             }
 
-            // Jarretière 2 : port de brassage interne → port de départ vers site suivant
-            if (portTransitMid !== hop.portEntree) {
-              const type2 = linkType(portTransitMid, hop.portEntree);
-              const jar2Id = await getOrCreateTransitJar(siteTransit, portTransitMid, hop.portEntree, type2);
-              if (jar2Id) {
-                jonctions.push({
-                  ordre: ordre++,
-                  cable_id: jar2Id,
-                  port_entree_id: portTransitMid,
-                  port_sortie_id: hop.portEntree,
-                });
-              }
-            }
-          } else if (portTransitIn && !portTransitMid && portTransitIn !== hop.portEntree) {
-            if (portTransitIn && hop.portEntree) {
-              const typeF = linkType(portTransitIn, hop.portEntree);
-              const jarId = await getOrCreateTransitJar(siteTransit, portTransitIn, hop.portEntree, typeF);
-              if (jarId) {
-                jonctions.push({
-                  ordre: ordre++,
-                  cable_id: jarId,
-                  port_entree_id: portTransitIn,
-                  port_sortie_id: hop.portEntree,
-                });
-              }
+            // Câble interne 2 : port de brassage interne → port de départ vers site suivant
+            if (portTransitMid !== hop.portEntree && jDetails?.j2) {
+              jonctions.push({
+                ordre: ordre++,
+                cable_id: jDetails.j2.id,
+                port_entree_id: portTransitMid,
+                port_sortie_id: hop.portEntree,
+              });
             }
           }
         }
@@ -462,7 +512,11 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
         });
       }
 
-      // Appel de l'insertion et propagation atomique en base de données via RPC
+      // Appel de l'insertion et propagation atomique en base de données via RPC.
+      // p_port_id est le port principal du service (portEntree du hop 0).
+      // Les jonctions contiennent déjà ce port (port_entree_id) donc la RPC
+      // le marquera OCCUPE via la boucle jonctions → pas de doublon.
+      // p_port_id sert de référence pour le service (colonne services.port_id).
       const { data: rpcData, error: rpcErr } = await supabase.rpc(
         "create_service_with_jonctions_atomic",
         {
@@ -570,6 +624,7 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
             setErr={setErr}
             onConfirm={onConfirm}
             siteName={siteName}
+            resolvedJarretieresList={resolvedHopsJarretieres}
           />
         );
       default:
@@ -594,6 +649,10 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
               onSelectTransitMid={onSelectTransitMid}
               onNextHop={onNextHop}
               siteName={siteName}
+              resolvedJarretieres={resolvedHopsJarretieres[activeHopIdx]}
+              allInternalCables={allInternalCables}
+              onSelectJarretiere1={onSelectJarretiere1}
+              onSelectJarretiere2={onSelectJarretiere2}
             />
           );
         }

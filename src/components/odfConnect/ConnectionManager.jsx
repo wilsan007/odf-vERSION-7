@@ -144,6 +144,20 @@ export function ConnectionManager({
     }
   };
 
+  const getEquipementPortDisplay = (eqPort) => {
+    if (!eqPort) return "—";
+    const eq = eqPort.equipements;
+    const rack = eq?.racks;
+    const site = rack?.sites;
+    const parts = [
+      site?.id || "",
+      rack?.name || "",
+      eq?.name || "",
+      eqPort.slot_port || ""
+    ].filter(Boolean);
+    return parts.join("-");
+  };
+
   const getPortDisplay = (port) => {
     if (!port || !port.slots) return "—";
     const slot = port.slots;

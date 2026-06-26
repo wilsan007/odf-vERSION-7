@@ -172,6 +172,8 @@ export function InfraSelector({
   const [rack, setRack] = useState("");
   const [odf, setOdf] = useState("");
   const [selectedSlots, setSelectedSlots] = useState([]);
+  const [freePorts, setFreePorts] = useState([]);
+  const [selectedPort, setSelectedPort] = useState("");
 
   // Chargement initial des sites
   useEffect(() => { getSites().then(r => setSites(r.data || [])); }, []);
@@ -185,22 +187,22 @@ export function InfraSelector({
 
   // CASCADE site → salles
   useEffect(() => {
-    setSalle(""); setRack(""); setOdf(""); setSelectedSlots([]);
-    setSalles([]); setRacks([]); setOdfs([]); setSlots([]);
+    setSalle(""); setRack(""); setOdf(""); setSelectedSlots([]); setSelectedPort("");
+    setSalles([]); setRacks([]); setOdfs([]); setSlots([]); setFreePorts([]);
     if (site) getSalles(site).then(r => setSalles(r.data || []));
   }, [site]);
 
   // CASCADE salle → racks
   useEffect(() => {
-    setRack(""); setOdf(""); setSelectedSlots([]);
-    setRacks([]); setOdfs([]); setSlots([]);
+    setRack(""); setOdf(""); setSelectedSlots([]); setSelectedPort("");
+    setRacks([]); setOdfs([]); setSlots([]); setFreePorts([]);
     if (site) getRacks(site, salle || null).then(r => setRacks(r.data || []));
   }, [salle, site]);
 
   // CASCADE rack → ODFs
   useEffect(() => {
-    setOdf(""); setSelectedSlots([]);
-    setOdfs([]); setSlots([]);
+    setOdf(""); setSelectedSlots([]); setSelectedPort("");
+    setOdfs([]); setSlots([]); setFreePorts([]);
     if (rack) {
       getOdfs(rack).then(async (r) => {
         const odfList = r.data || [];
@@ -257,6 +259,15 @@ export function InfraSelector({
     }
   }, [rack, connType, typeLien]);
 
+  // CASCADE ODF → port libre unique (connType === "port")
+  useEffect(() => {
+    setSelectedPort(""); setFreePorts([]);
+    if (odf && connType === "port") {
+      supabase.from("ports").select("id,slot_port,statut,slot_id").eq("odf_id", odf).order("slot_port")
+        .then(r => setFreePorts((r.data || []).filter(p => p.statut === "LIBRE")));
+    }
+  }, [odf, connType]);
+
   // CASCADE ODF → slots
   useEffect(() => {
     setSelectedSlots([]); setSlots([]);
@@ -289,8 +300,8 @@ export function InfraSelector({
 
   // Notifier le parent
   useEffect(() => {
-    onChange({ site, salle, rack, odf, selectedSlots });
-  }, [site, salle, rack, odf, selectedSlots]);
+    onChange({ site, salle, rack, odf, selectedSlots, selectedPort });
+  }, [site, salle, rack, odf, selectedSlots, selectedPort]);
 
   const filteredSitesList = sites.filter(s => s.id !== excludeSiteId);
   const filteredSallesList = salles.filter(s => s.id !== excludeSalleId);
@@ -334,23 +345,34 @@ export function InfraSelector({
         {connType === "slot" && (
           <div style={{ gridColumn: "1/-1" }}>
             <Label TH={TH}>Slots (Cochez le ou les slots souhaités)</Label>
-            <MultiSlotSelect 
-              slots={slots} 
-              selected={selectedSlots} 
-              onChange={setSelectedSlots} 
-              TH={TH} 
+            <MultiSlotSelect
+              slots={slots}
+              selected={selectedSlots}
+              onChange={setSelectedSlots}
+              TH={TH}
               disabled={!odf}
             />
           </div>
         )}
+        {connType === "port" && (
+          <div style={{ gridColumn: "1/-1" }}>
+            <Label TH={TH}>Port libre</Label>
+            <Sel value={selectedPort} onChange={setSelectedPort} TH={TH} disabled={!odf}>
+              <option value="">{odf ? "— Sélectionner un port —" : "— Sélectionner un ODF d'abord —"}</option>
+              {freePorts.map(p => <option key={p.id} value={p.id}>{p.slot_port}</option>)}
+            </Sel>
+            {odf && freePorts.length === 0 && (
+              <div style={{ marginTop: "8px", fontSize: "11px", color: TH.text3 }}>⚠ Aucun port libre dans cet ODF.</div>
+            )}
+          </div>
+        )}
       </div>
-      {connType === "slot" ? (
+      {connType === "slot" && (
         selectedSlots.map(sId => (
           <SlotPortPreview key={sId} slotId={sId} label={`Ports du slot ${sId?.split("_").pop() || ""}`} color={color} TH={TH} />
         ))
-      ) : (
-        <OdfSlotsPreview odfId={odf} color={color} TH={TH} />
       )}
+      {connType === "odf" && <OdfSlotsPreview odfId={odf} color={color} TH={TH} />}
     </div>
   );
 }

@@ -84,6 +84,52 @@ export const createSlot = (data) =>
 export const deleteSlot = (id) =>
   supabase.from('slots').delete().eq('id', id)
 
+// ─── Équipements actifs (CIENA/TEJAS…) ───────────────────────────────────────
+// id  : 'RDK-R1-EQ1', ...
+export const getEquipements = (rackId) => {
+  let q = supabase.from('equipements')
+    .select('*, racks(name, sites(name))')
+    .order('name')
+  if (rackId) q = q.eq('rack_id', rackId)
+  return q
+}
+
+export const createEquipement = (data) =>
+  supabase.from('equipements').insert(data).select().single()
+
+export const deleteEquipement = (id) =>
+  supabase.from('equipements').delete().eq('id', id)
+
+// ─── Slots équipement ────────────────────────────────────────────────────────
+// id  : 'RDK-R1-EQ1_SL05', ... (ports_count variable, contrairement aux slots ODF)
+export const getEquipementSlots = (equipementId) => {
+  let q = supabase.from('equipement_slots').select('*').order('slot_num')
+  if (equipementId) q = q.eq('equipement_id', equipementId)
+  return q
+}
+
+export const createEquipementSlot = (data) =>
+  supabase.from('equipement_slots').insert(data).select().single()
+
+export const deleteEquipementSlot = (id) =>
+  supabase.from('equipement_slots').delete().eq('id', id)
+
+// ─── Ports équipement ─────────────────────────────────────────────────────────
+// id        : 'RDK-R1-EQ1_SL05P11', ...
+// slot_port : 'SL05P11'
+export const getEquipementPorts = (slotId) => {
+  let q = supabase.from('equipement_ports').select('*').order('slot_port')
+  if (slotId) q = q.eq('slot_id', slotId)
+  return q
+}
+
+export const getEquipementPortsByEquipement = (equipementId) =>
+  supabase.from('equipement_ports').select('*, equipement_slots(name, slot_num)')
+    .eq('equipement_id', equipementId).order('slot_port')
+
+export const updateEquipementPort = (id, data) =>
+  supabase.from('equipement_ports').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
 // ─── Ports ───────────────────────────────────────────────────────────────────
 // id        : 'RDK-R1-ODF1_S01P01', ...
 // slot_port : 'S01P01'
@@ -198,25 +244,6 @@ export const checkTopologie = async () => {
   const ok = list.every(l => l.total >= 12)
   return { ok, liaisons: list }
 }
-
-// ─── Jarretières (cordons de brassage internes à un site) ──────────────────────
-// L'id est auto-généré ('{site}-JARNN') par le trigger trg_jarretiere_id si omis.
-export const getJarretieres = () =>
-  supabase.from('jarretieres').select(`
-    *,
-    sites(id, name),
-    port_a:ports!jarretieres_port_a_id_fkey(id, slot_port),
-    port_b:ports!jarretieres_port_b_id_fkey(id, slot_port)
-  `).order('id')
-
-export const createJarretiere = (data) =>
-  supabase.from('jarretieres').insert(data).select().single()
-
-export const updateJarretiere = (id, data) =>
-  supabase.from('jarretieres').update(data).eq('id', id).select().single()
-
-export const deleteJarretiere = (id) =>
-  supabase.from('jarretieres').delete().eq('id', id)
 
 // ─── Services ──────────────────────────────────────────────────────────────────
 // La capacité est gérée automatiquement par le trigger trg_service_capacity.
@@ -354,8 +381,8 @@ export const getSitePorts = async (siteId) => {
 // Retourne pour un site donné :
 //   - internalPorts : ports sur ODF INTERNE (iODF), enrichis avec odf_type/rack_id/salle_id
 //   - externalPorts : ports sur ODF EXTERNE du site
-//   - jarretieres   : câbles JARRETIERE dont les deux ports sont sur ce site
-// ─── Résolution salle_id en lot (pour le wizard : décider JARRETIERE vs INTERNE) ─────────
+//   - cablesInternes : câbles INTERNE dont les deux ports sont sur ce site
+// ─── Résolution salle_id en lot (pour le wizard : déterminer la portée d'une connexion INTERNE) ─────────
 // Retourne un Map portId → salle_id en 3 requêtes optimisées (IN) quel que soit le nombre de ports.
 // Si un port n'a pas de salle associée, sa valeur est null.
 export const getSalleIdsForPorts = async (portIds) => {
@@ -392,7 +419,7 @@ export const getSalleIdsForPorts = async (portIds) => {
 };
 
 export const getTransitData = async (siteId) => {
-  const empty = { internalPorts: [], externalPorts: [], jarretieres: [] };
+  const empty = { internalPorts: [], externalPorts: [], cablesInternes: [] };
 
   const { data: racks, error: rErr } = await supabase
     .from('racks')
@@ -424,13 +451,13 @@ export const getTransitData = async (siteId) => {
   const externalSlotIds = new Set(slots.filter(s => externalOdfIds.includes(s.odf_id)).map(s => s.id));
   const allSlotIds = slots.map(s => s.id);
 
-  const [portsRes, jarRes] = await Promise.all([
+  const [portsRes, internesRes] = await Promise.all([
     supabase.from('ports')
       .select('id, slot_port, statut, slot_id, odf_id')
       .in('slot_id', allSlotIds)
       .order('id'),
     supabase.from('cables_fibre')
-      .select('id, port_source_id, port_dest_id')
+      .select('id, cable_reference, nom, type_lien, port_source_id, port_dest_id')
       // Inclure INTERNE (intersalle et même salle) — ce sont les connexions locales
       .in('type_lien', ['INTERNE']),
 
@@ -439,7 +466,7 @@ export const getTransitData = async (siteId) => {
   const allPorts = portsRes.data || [];
   const allPortIds = new Set(allPorts.map(p => p.id));
 
-  const jarretieres = (jarRes.data || []).filter(
+  const cablesInternes = (internesRes.data || []).filter(
     j => allPortIds.has(j.port_source_id) && allPortIds.has(j.port_dest_id)
   );
 
@@ -461,7 +488,7 @@ export const getTransitData = async (siteId) => {
   return {
     internalPorts: enriched.filter(p => internalSlotIds.has(p.slot_id)),
     externalPorts: enriched.filter(p => externalSlotIds.has(p.slot_id)),
-    jarretieres,
+    cablesInternes,
   };
 };
 

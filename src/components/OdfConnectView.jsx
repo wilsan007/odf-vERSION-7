@@ -52,10 +52,21 @@ export default function OdfConnectView({ t, TH }) {
             )
           )
         )
+      ),
+      equipement_port:equipement_ports!cables_fibre_equipement_port_id_fkey(
+        id, slot_port,
+        equipements(id, name, type,
+          racks(id, name,
+            sites(id, name)
+          )
+        )
       )
     `).order('cable_reference')
     .then(r => {
-      setCables(r.data || []);
+      // Filtrer pour exclure les jarretières de transit dynamique créées pour un service (port-to-port, contiennent Pxx dans leur référence)
+      const allCables = r.data || [];
+      const infraCables = allCables.filter(c => !/P\d+/i.test(c.cable_reference || ""));
+      setCables(infraCables);
       setLoadingCables(false);
     }).catch(() => setLoadingCables(false));
   };

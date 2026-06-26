@@ -87,8 +87,12 @@ export const T = {
     selectSlot: "Sélectionner un slot",
     allSites: "Tous les sites", allStatuses: "Tous les statuts",
     portDrawerTitle: "Détails du port", close: "Fermer",
-    infraTabs: ["Sites", "Salles", "Racks", "ODFs", "Slots", "🔗 Connexions"],
+    infraTabs: ["Sites", "Salles", "Racks", "ODFs", "Slots", "Équipements", "Slots Éq."],
     welcome: "Bienvenue",
+    equipementName: "Nom de l'équipement", equipementType: "Type (ex: CIENA SLTE)",
+    equipementSlotName: "Slot (ex: 5 pour SL05)", portsCount: "Nb de ports",
+    equipementPortName: "Port", typeModule: "Type module", frequenceDwdm: "Fréquence DWDM",
+    selectEquipement: "Sélectionner un équipement", allEquipements: "Tous les équipements",
   },
   en: {
     appName: "ODF Manager", appSub: "Omega Tech · Djibouti Telecom",
@@ -119,8 +123,12 @@ export const T = {
     selectSlot: "Select a slot",
     allSites: "All sites", allStatuses: "All statuses",
     portDrawerTitle: "Port details", close: "Close",
-    infraTabs: ["Sites", "Rooms", "Racks", "ODFs", "Slots"],
+    infraTabs: ["Sites", "Rooms", "Racks", "ODFs", "Slots", "Equipment", "Eq. Slots"],
     welcome: "Welcome",
+    equipementName: "Equipment name", equipementType: "Type (e.g. CIENA SLTE)",
+    equipementSlotName: "Slot (e.g. 5 for SL05)", portsCount: "Ports count",
+    equipementPortName: "Port", typeModule: "Module type", frequenceDwdm: "DWDM frequency",
+    selectEquipement: "Select an equipment", allEquipements: "All equipment",
   }
 };
 
