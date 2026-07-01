@@ -88,15 +88,23 @@ export function ConfirmStep({
             const jDetails = resolvedJarretieresList?.[hopIdx];
             const j1 = jDetails?.j1;
             const j2 = jDetails?.j2;
+            const intersalleCable = jDetails?.intersalleCable;
+            const portMid2 = hop?.portTransitMid2 || null;
+            const isIntersalle = !!(portMid2 && intersalleCable);
 
             return (
               <div key={hopIdx} style={{
                 marginBottom: "8px", padding: "8px 10px",
                 background: TH.bgSurface, borderRadius: "8px",
-                border: `1px solid ${TH.border}`
+                border: `1px solid ${isIntersalle ? TH.gold : TH.border}`
               }}>
-                <div style={{ fontSize: "10px", color: TH.text2, fontWeight: 700, marginBottom: "6px" }}>
+                <div style={{ fontSize: "10px", color: TH.text2, fontWeight: 700, marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
                   Site de transit : {siteTransit}
+                  {isIntersalle && (
+                    <span style={{ background: `${TH.gold}22`, color: TH.gold, padding: "1px 6px", borderRadius: "4px", fontSize: "9px" }}>
+                      INTERSALLE
+                    </span>
+                  )}
                 </div>
                 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", marginBottom: "4px" }}>
@@ -107,6 +115,14 @@ export function ConfirmStep({
                   <span style={{ background: `${TH.purple}22`, color: TH.purple, padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>
                     {portMid.replace('_', '-')}
                   </span>
+                  {isIntersalle && (
+                    <>
+                      <span style={{ color: TH.gold, fontWeight: 700 }}>══►</span>
+                      <span style={{ background: `${TH.gold}22`, color: TH.gold, padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>
+                        {portMid2.replace('_', '-')}
+                      </span>
+                    </>
+                  )}
                   <span style={{ color: TH.purple, fontWeight: 700 }}>─►</span>
                   <span style={{ background: `${TH.cyan}22`, color: TH.cyan, padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>
                     {portOut.replace('_', '-')}
@@ -114,8 +130,9 @@ export function ConfirmStep({
                 </div>
                 
                 <div style={{ fontSize: "9px", color: TH.text3, display: "flex", flexDirection: "column", gap: "2px" }}>
-                  {j1 && <div>Jarretière 1 : <strong>{j1.cable_reference}</strong> {j1.nom ? `(${j1.nom})` : ""}</div>}
-                  {j2 && <div>Jarretière 2 : <strong>{j2.cable_reference}</strong> {j2.nom ? `(${j2.nom})` : ""}</div>}
+                  {j1 && <div>Jarretière 1 (intrasalle) : <strong>{j1.cable_reference}</strong> {j1.nom ? `(${j1.nom})` : ""}</div>}
+                  {isIntersalle && intersalleCable && <div style={{ color: TH.gold }}>Câble intersalle : <strong>{intersalleCable.cable_reference}</strong> {intersalleCable.nom ? `(${intersalleCable.nom})` : ""}</div>}
+                  {j2 && <div>Jarretière 2 (intrasalle) : <strong>{j2.cable_reference}</strong> {j2.nom ? `(${j2.nom})` : ""}</div>}
                 </div>
               </div>
             );

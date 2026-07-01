@@ -142,6 +142,103 @@ export function findBestInternalPort({
 }
 
 /**
+ * Trouve les câbles intersalle existants entre deux salles d'un même site.
+ *
+ * @param {object} params
+ * @param {Array}  params.internalPorts   - Ports internes (iODF) enrichis avec salle_id
+ * @param {Array}  params.cablesInternes  - Câbles INTERNES du site
+ * @param {string} params.salleIn         - salle_id de la salle d'arrivée
+ * @param {string} params.salleOut        - salle_id de la salle de départ
+ * @returns {Array}  Câbles intersalle (source dans salleIn, dest dans salleOut ou inverse)
+ */
+export function findIntersalleCables({ internalPorts, externalPorts, cablesInternes, salleIn, salleOut }) {
+  if (!salleIn || !salleOut || salleIn === salleOut) return [];
+  const allPorts = [...(internalPorts || []), ...(externalPorts || [])];
+  const portSalleMap = Object.fromEntries(allPorts.map(p => [p.id, p.salle_id]));
+  return cablesInternes.filter(c => {
+    const sSalle = portSalleMap[c.port_source_id];
+    const dSalle = portSalleMap[c.port_dest_id];
+    return (sSalle === salleIn && dSalle === salleOut) || (sSalle === salleOut && dSalle === salleIn);
+  });
+}
+
+/**
+ * Trouve le meilleur transit intersalle sur un site de transit où
+ * le port d'arrivée et le port de sortie sont dans des salles différentes.
+ *
+ * Cherche un port interne dans la salle d'arrivée (portTransitMid) connecté
+ * via un câble intersalle existant à un port interne dans la salle de départ
+ * (portTransitMid2), puis une jarretière intrasalle de portTransitMid2 vers
+ * le port de sortie externe (portEntreeB).
+ *
+ * @param {object} params
+ * @param {string}   params.portTransitIn      - ID du port d'entrée (ODF externe, salleIn)
+ * @param {string}   params.portEntreeB        - ID du port de sortie (ODF externe, salleOut)
+ * @param {Array}    params.internalPorts      - Ports internes (iODF) enrichis avec salle_id
+ * @param {Array}    params.externalPorts      - Ports externes (ODF) enrichis avec salle_id
+ * @param {Array}    params.cablesInternes     - Câbles INTERNES existants
+ * @param {string}   params.salleIn            - salle_id du port d'arrivée
+ * @param {string}   params.salleOut           - salle_id du port de sortie
+ * @returns {Array}  Candidats triés par score : { portTransitMid, portTransitMid2, intersalleCable, score }
+ */
+export function findBestIntersalleTransit({
+  portTransitIn,
+  portEntreeB,
+  internalPorts,
+  externalPorts,
+  cablesInternes,
+  salleIn,
+  salleOut,
+}) {
+  if (!salleIn || !salleOut || salleIn === salleOut) return [];
+
+  const portNum = (id) => {
+    const m = (id || '').match(/P(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  const slotNum = (id) => {
+    const m = (id || '').match(/S(\d+)P/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+
+  const allPorts = [...(internalPorts || []), ...(externalPorts || [])];
+  const portSalleMap = Object.fromEntries(allPorts.map(p => [p.id, p.salle_id]));
+
+  const intersalleCables = findIntersalleCables({ internalPorts, externalPorts, cablesInternes, salleIn, salleOut });
+
+  const refPortNumIn = portNum(portTransitIn);
+  const refSlotNumIn = slotNum(portTransitIn);
+  const refPortNumOut = portNum(portEntreeB);
+  const refSlotNumOut = slotNum(portEntreeB);
+
+  const candidates = [];
+
+  for (const cable of intersalleCables) {
+    const srcSalle = portSalleMap[cable.port_source_id];
+    const isSrcInSalleIn = srcSalle === salleIn;
+    const midId  = isSrcInSalleIn ? cable.port_source_id : cable.port_dest_id;
+    const mid2Id = isSrcInSalleIn ? cable.port_dest_id   : cable.port_source_id;
+
+    const distPortIn  = Math.abs(portNum(midId)  - refPortNumIn);
+    const distSlotIn  = Math.abs(slotNum(midId)  - refSlotNumIn);
+    const distPortOut = Math.abs(portNum(mid2Id) - refPortNumOut);
+    const distSlotOut = Math.abs(slotNum(mid2Id) - refSlotNumOut);
+
+    const score = distPortIn + distSlotIn * 0.1 + distPortOut + distSlotOut * 0.1;
+
+    candidates.push({
+      portTransitMid: midId,
+      portTransitMid2: mid2Id,
+      intersalleCable: cable,
+      score,
+    });
+  }
+
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates;
+}
+
+/**
  * Hook React qui construit un graphe orienté de sites à partir des câbles
  * inter-sites (type EXTERNE) et expose des utilitaires de routage BFS.
  *

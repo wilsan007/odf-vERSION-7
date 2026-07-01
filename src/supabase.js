@@ -84,6 +84,46 @@ export const createSlot = (data) =>
 export const deleteSlot = (id) =>
   supabase.from('slots').delete().eq('id', id)
 
+// ─── Technologies réseau (WDM, SDH, OTN…) ────────────────────────────────────
+export const getTechnologies = () =>
+  supabase.from('technologies').select('id, name, description').order('ordre')
+
+// ─── Catalogue des modèles de cartes ─────────────────────────────────────────
+export const getCarteModeles = (technologieId) => {
+  let q = supabase
+    .from('carte_modeles')
+    .select('id, nom, fabricant, technologie_id, ports_count, description')
+    .order('fabricant').order('nom')
+  if (technologieId) q = q.eq('technologie_id', technologieId)
+  return q
+}
+
+export const createCarteModele = (data) =>
+  supabase.from('carte_modeles').insert(data).select().single()
+
+// ─── Cartes physiques (stock / installées) ────────────────────────────────────
+export const getCartes = (etat) => {
+  let q = supabase
+    .from('cartes')
+    .select('*, carte_modeles(nom, fabricant, technologie_id, ports_count)')
+    .order('created_at', { ascending: false })
+  if (etat) q = q.eq('etat', etat)
+  return q
+}
+
+export const createCarte = (data) =>
+  supabase.from('cartes').insert(data).select('id').single()
+
+export const updateCarte = (id, data) =>
+  supabase.from('cartes').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+// ─── Lots de réception ────────────────────────────────────────────────────────
+export const getLots = () =>
+  supabase.from('lots').select('*, fournisseurs(nom)').order('date_reception', { ascending: false })
+
+export const createLot = (data) =>
+  supabase.from('lots').insert(data).select().single()
+
 // ─── Équipements actifs (CIENA/TEJAS…) ───────────────────────────────────────
 // id  : 'RDK-R1-EQ1', ...
 export const getEquipements = (rackId) => {
@@ -421,73 +461,15 @@ export const getSalleIdsForPorts = async (portIds) => {
 export const getTransitData = async (siteId) => {
   const empty = { internalPorts: [], externalPorts: [], cablesInternes: [] };
 
-  const { data: racks, error: rErr } = await supabase
-    .from('racks')
-    .select('id, salle_id')
-    .eq('site_id', siteId);
-  if (rErr || !racks?.length) return empty;
+  const { data, error } = await supabase.rpc('get_transit_data', { p_site_id: siteId });
+  if (error || !data) return empty;
 
-  const rackIds = racks.map(r => r.id);
-  const rackSalleMap = Object.fromEntries(racks.map(r => [r.id, r.salle_id]));
-
-  const { data: odfs } = await supabase
-    .from('odfs')
-    .select('id, name, odf_type, rack_id')
-    .in('rack_id', rackIds);
-  if (!odfs?.length) return empty;
-
-  const odfMap = Object.fromEntries(odfs.map(o => [o.id, o]));
-  const internalOdfIds = odfs.filter(o => o.odf_type === 'INTERNE').map(o => o.id);
-  const externalOdfIds = odfs.filter(o => o.odf_type === 'EXTERNE').map(o => o.id);
-
-  const { data: slots } = await supabase
-    .from('slots')
-    .select('id, odf_id, slot_num')
-    .in('odf_id', odfs.map(o => o.id));
-  if (!slots?.length) return empty;
-
-  const slotMap = Object.fromEntries(slots.map(s => [s.id, s]));
-  const internalSlotIds = new Set(slots.filter(s => internalOdfIds.includes(s.odf_id)).map(s => s.id));
-  const externalSlotIds = new Set(slots.filter(s => externalOdfIds.includes(s.odf_id)).map(s => s.id));
-  const allSlotIds = slots.map(s => s.id);
-
-  const [portsRes, internesRes] = await Promise.all([
-    supabase.from('ports')
-      .select('id, slot_port, statut, slot_id, odf_id')
-      .in('slot_id', allSlotIds)
-      .order('id'),
-    supabase.from('cables_fibre')
-      .select('id, cable_reference, nom, type_lien, port_source_id, port_dest_id')
-      // Inclure INTERNE (intersalle et même salle) — ce sont les connexions locales
-      .in('type_lien', ['INTERNE']),
-
-  ]);
-
-  const allPorts = portsRes.data || [];
-  const allPortIds = new Set(allPorts.map(p => p.id));
-
-  const cablesInternes = (internesRes.data || []).filter(
-    j => allPortIds.has(j.port_source_id) && allPortIds.has(j.port_dest_id)
-  );
-
-  const enrichPort = (p) => {
-    const slot = slotMap[p.slot_id];
-    const odf  = slot ? odfMap[slot.odf_id] : null;
-    return {
-      ...p,
-      odf_type: odf?.odf_type || 'EXTERNE',
-      odf_name: odf?.name     || '',
-      rack_id:  odf?.rack_id  || null,
-      salle_id: odf ? rackSalleMap[odf.rack_id] || null : null,
-      slot_num: slot?.slot_num || 0,
-    };
-  };
-
-  const enriched = allPorts.map(enrichPort);
+  const ports = data.ports || [];
+  const cablesInternes = data.cables || [];
 
   return {
-    internalPorts: enriched.filter(p => internalSlotIds.has(p.slot_id)),
-    externalPorts: enriched.filter(p => externalSlotIds.has(p.slot_id)),
+    internalPorts: ports.filter(p => p.odf_type === 'INTERNE'),
+    externalPorts: ports.filter(p => p.odf_type === 'EXTERNE'),
     cablesInternes,
   };
 };

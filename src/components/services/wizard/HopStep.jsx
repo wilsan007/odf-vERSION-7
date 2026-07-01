@@ -27,6 +27,10 @@ export function HopStep({
   allInternalCables,
   onSelectJarretiere1,
   onSelectJarretiere2,
+  intersalleReco,
+  transitData,
+  onSelectTransitMid2,
+  onSelectIntersalleCable,
 }) {
   const fromSite = pathSites[n];
   const toSite = pathSites[n + 1];
@@ -164,15 +168,18 @@ export function HopStep({
                 <span style={{
                   background: `${TH.green}22`, color: TH.green, fontSize: "9px",
                   padding: "2px 8px", borderRadius: "4px", fontWeight: 700, flexShrink: 0
-                }}>ODF EXTERNE</span>
+                }}>Connexion externe</span>
               )}
             </div>
           </div>
 
           {portTransitIn && (() => {
-            const salleIn = (transitPorts || []).find(p => p.id === portTransitIn)?.salle_id || null;
-            const salleMid = (transitPorts || []).find(p => p.id === selectedHop.portTransitMid)?.salle_id || null;
-            const salleOut = (transitPorts || []).find(p => p.id === selectedHop.portEntree)?.salle_id || null;
+            const allEnrichedPorts = transitData ? [...transitData.internalPorts, ...transitData.externalPorts] : (transitPorts || []);
+            const salleIn = allEnrichedPorts.find(p => p.id === portTransitIn)?.salle_id || null;
+            const salleMid = allEnrichedPorts.find(p => p.id === selectedHop.portTransitMid)?.salle_id || null;
+            const salleMid2 = allEnrichedPorts.find(p => p.id === selectedHop.portTransitMid2)?.salle_id || null;
+            const salleOut = allEnrichedPorts.find(p => p.id === selectedHop.portEntree)?.salle_id || null;
+            const isIntersalle = salleIn && salleOut && salleIn !== salleOut;
 
             const int1Type = 'INTERNE';
             const int2Type = 'INTERNE';
@@ -190,6 +197,14 @@ export function HopStep({
                   display: "flex", alignItems: "center", gap: "6px"
                 }}>
                   <span>🔀</span> Connexion locale planifiée sur {siteName(fromSite)}
+                  {isIntersalle && (
+                    <span style={{
+                      background: `${TH.gold}22`, color: TH.gold, padding: "2px 8px",
+                      borderRadius: "4px", fontSize: "9px", fontWeight: 700
+                    }}>
+                      INTERSALLE : Salle {salleIn} → Salle {salleOut}
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -206,7 +221,7 @@ export function HopStep({
                     }}>
                       {formatPortDisplay(portTransitIn)}
                     </div>
-                    <span style={{ fontSize: "9px", color: TH.blue }}>ODF EXTERNE</span>
+                    <span style={{ fontSize: "9px", color: TH.blue }}>Connexion externe</span>
                     {salleIn && <span style={{ fontSize: "8px", color: TH.text3 }}>Salle {salleIn}</span>}
                   </div>
 
@@ -236,9 +251,39 @@ export function HopStep({
                         ? formatPortDisplay(selectedHop.portTransitMid)
                         : "— à choisir —"}
                     </div>
-                    <span style={{ fontSize: "9px", color: TH.purple }}>iODF (INTERNE)</span>
+                    <span style={{ fontSize: "9px", color: TH.purple }}>Connexion interne</span>
                     {salleMid && <span style={{ fontSize: "8px", color: TH.text3 }}>Salle {salleMid}</span>}
                   </div>
+
+                  {isIntersalle && selectedHop.portTransitMid2 && (
+                    <>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", flexShrink: 0 }}>
+                        <span style={{ fontSize: "9px", color: TH.gold, fontWeight: 700 }}>══►</span>
+                        <span style={{ fontSize: "8px", color: TH.gold, fontWeight: 600 }}>
+                          câble intersalle
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                        <span style={{
+                          fontSize: "9px", color: TH.text3, fontWeight: 700,
+                          textTransform: "uppercase", letterSpacing: "0.5px"
+                        }}>Port brassage 2</span>
+                        <div style={{
+                          background: `${TH.gold}22`,
+                          border: `1px solid ${TH.gold}`,
+                          borderRadius: "6px", padding: "6px 10px",
+                          fontFamily: "'JetBrains Mono', monospace", fontSize: "11px",
+                          fontWeight: 700, color: TH.gold,
+                          minWidth: "80px", textAlign: "center"
+                        }}>
+                          {formatPortDisplay(selectedHop.portTransitMid2)}
+                        </div>
+                        <span style={{ fontSize: "9px", color: TH.gold }}>Connexion interne</span>
+                        {salleMid2 && <span style={{ fontSize: "8px", color: TH.text3 }}>Salle {salleMid2}</span>}
+                      </div>
+                    </>
+                  )}
 
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", flexShrink: 0 }}>
                     <span style={{ fontSize: "9px", color: typeLabel(int2Type).color, fontWeight: 700 }}>──►</span>
@@ -266,44 +311,55 @@ export function HopStep({
                         ? formatPortDisplay(selectedHop.portEntree)
                         : "— à choisir —"}
                     </div>
-                    <span style={{ fontSize: "9px", color: TH.cyan }}>ODF EXTERNE → {siteName(toSite)}</span>
+                    <span style={{ fontSize: "9px", color: TH.cyan }}>Connexion externe → {siteName(toSite)}</span>
                     {salleOut && <span style={{ fontSize: "8px", color: TH.text3 }}>Salle {salleOut}</span>}
                   </div>
                 </div>
 
                 {selectedHop.portTransitMid && selectedHop.portEntree && (() => {
+                  const portSalleMap = transitData
+                    ? Object.fromEntries([...transitData.internalPorts, ...transitData.externalPorts].map(p => [p.id, p.salle_id]))
+                    : null;
+                  const salleIn = portSalleMap?.[portTransitIn] || null;
+                  const salleMid = portSalleMap?.[selectedHop.portTransitMid] || null;
+                  const salleOut = portSalleMap?.[selectedHop.portEntree] || null;
+                  const isIntersalleCase = salleIn && salleOut && salleIn !== salleOut;
+                  const isSameSalle = salleMid && salleOut && salleMid === salleOut;
+                  const effectiveMid2 = isIntersalleCase ? (selectedHop.portTransitMid2 || null) : selectedHop.portTransitMid;
                   const isJ1Required = portTransitIn && selectedHop.portTransitMid && portTransitIn !== selectedHop.portTransitMid;
-                  const isJ2Required = selectedHop.portTransitMid && selectedHop.portEntree && selectedHop.portTransitMid !== selectedHop.portEntree;
+                  const isJ2Required = effectiveMid2 && selectedHop.portEntree && effectiveMid2 !== selectedHop.portEntree && (!isIntersalleCase || selectedHop.portTransitMid2);
                   
                   const j1 = resolvedJarretieres?.j1;
                   const j2 = resolvedJarretieres?.j2;
+                  const intersalleCable = resolvedJarretieres?.intersalleCable;
                   
                   const isJ1Valid = !isJ1Required || j1;
                   const isJ2Valid = !isJ2Required || j2;
-                  const isValid = isJ1Valid && isJ2Valid;
+                  const isIntersalleValid = !isIntersalleCase || (intersalleCable && selectedHop.portTransitMid2);
+                  const isValid = isJ1Valid && isJ2Valid && isIntersalleValid;
 
                   return (
                     <div style={{
                       marginTop: "12px", padding: "10px",
-                      background: isValid ? `${TH.green}12` : "rgba(239, 68, 68, 0.08)",
-                      border: `1px solid ${isValid ? TH.green : TH.red}33`,
+                      background: isValid ? `${TH.green}12` : `${TH.blue}10`,
+                      border: `1px solid ${isValid ? TH.green : TH.blue}33`,
                       borderRadius: "8px",
                       fontSize: "11px",
                       display: "flex", flexDirection: "column", gap: "6px"
                     }}>
-                      <div style={{ fontWeight: 700, color: isValid ? TH.green : TH.red, fontSize: "11px", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span>{isValid ? "✓ Connexions locales validées" : "⚠ Connexions locales requises manquantes"}</span>
+                      <div style={{ fontWeight: 700, color: isValid ? TH.green : TH.blue, fontSize: "11px", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>{isValid ? "✓ Connexions locales validées" : "✨ Connexions locales : création automatique prévue"}</span>
                       </div>
                       
                       {isJ1Required && (() => {
-                        const candidates = getJarretieresCandidates(portTransitIn, selectedHop.portTransitMid, allInternalCables);
+                        const candidates = getJarretieresCandidates(portTransitIn, selectedHop.portTransitMid, allInternalCables, portSalleMap);
                         if (candidates.length === 0) {
                           return (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: TH.red, fontSize: "11px" }}>
-                              <span>❌</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: TH.blue, fontSize: "11px" }}>
+                              <span>✨</span>
                               <span>
                                 Jarretière 1 ({formatPortDisplay(portTransitIn)} ↔ {formatPortDisplay(selectedHop.portTransitMid)}) :{" "}
-                                <span style={{ fontWeight: 600 }}>Aucune connexion existante entre ces slots</span>
+                                <span style={{ fontWeight: 600 }}>Sera créée automatiquement</span>
                               </span>
                             </div>
                           );
@@ -334,15 +390,33 @@ export function HopStep({
                         );
                       })()}
                       
+                      {isIntersalleCase && intersalleCable && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", color: TH.gold, fontSize: "11px" }}>
+                          <span>🔗</span>
+                          <span>
+                            Câble intersalle : <strong>{intersalleCable.cable_reference}</strong>
+                            {intersalleCable.nom ? ` (${intersalleCable.nom})` : ""}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {isIntersalleCase && !intersalleCable && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", color: TH.red, fontSize: "11px" }}>
+                          <span>⚠</span>
+                          <span>Aucun câble intersalle trouvé entre Salle {salleIn} et Salle {salleOut}. Veuillez en créer un manuellement.</span>
+                        </div>
+                      )}
+                      
                       {isJ2Required && (() => {
-                        const candidates = getJarretieresCandidates(selectedHop.portTransitMid, selectedHop.portEntree, allInternalCables);
+                        const j2Port = isIntersalleCase ? selectedHop.portTransitMid2 : selectedHop.portTransitMid;
+                        const candidates = getJarretieresCandidates(j2Port, selectedHop.portEntree, allInternalCables, portSalleMap);
                         if (candidates.length === 0) {
                           return (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: TH.red, fontSize: "11px" }}>
-                              <span>❌</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: TH.blue, fontSize: "11px" }}>
+                              <span>✨</span>
                               <span>
-                                Jarretière 2 ({formatPortDisplay(selectedHop.portTransitMid)} ↔ {formatPortDisplay(selectedHop.portEntree)}) :{" "}
-                                <span style={{ fontWeight: 600 }}>Aucune connexion existante entre ces slots</span>
+                                Jarretière 2 ({formatPortDisplay(j2Port)} ↔ {formatPortDisplay(selectedHop.portEntree)}) :{" "}
+                                <span style={{ fontWeight: 600 }}>Sera créée automatiquement</span>
                               </span>
                             </div>
                           );
@@ -350,7 +424,7 @@ export function HopStep({
                         return (
                           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", color: TH.text2, fontSize: "11px", fontWeight: 600 }}>
-                              <span>✅ Jarretière 2 ({formatPortDisplay(selectedHop.portTransitMid)} ↔ {formatPortDisplay(selectedHop.portEntree)}) :</span>
+                              <span>✅ Jarretière 2 ({formatPortDisplay(j2Port)} ↔ {formatPortDisplay(selectedHop.portEntree)}) :</span>
                               {candidates.length > 1 && (
                                 <span style={{ background: `${TH.blue}22`, color: TH.blue, padding: "1px 6px", borderRadius: "4px", fontSize: "9px", fontWeight: 700 }}>
                                   {candidates.length} options disponibles
@@ -374,8 +448,8 @@ export function HopStep({
                       })()}
 
                       {!isValid && (
-                        <div style={{ color: TH.text3, fontSize: "10px", marginTop: "4px", borderTop: `1px dashed ${TH.red}44`, paddingTop: "6px" }}>
-                          Veuillez créer l'interconnexion de brassage requise via le module <strong>Connexion ODF</strong> pour continuer.
+                        <div style={{ color: TH.text3, fontSize: "10px", marginTop: "4px", borderTop: `1px dashed ${TH.blue}44`, paddingTop: "6px" }}>
+                          La connexion locale sera <strong>créée automatiquement</strong> lors de la finalisation du service.
                         </div>
                       )}
                     </div>
@@ -390,7 +464,7 @@ export function HopStep({
               2. Port de sortie (côté {siteName(fromSite)}) vers {siteName(toSite)} *
             </label>
             <div style={{ fontSize: "10px", color: TH.text3, marginBottom: "6px" }}>
-              Choisissez le port de sortie disponible — cela permettra de recommander automatiquement le bon port iODF.
+              Choisissez le port de sortie disponible — cela permettra de recommander automatiquement le bon port de brassage interne.
             </div>
             <Sel value={selectedHop.portEntree || ""} onChange={handleSelectPortEntree} TH={TH}>
               <option value="">
@@ -422,7 +496,7 @@ export function HopStep({
 
           <div>
             <label style={{ display: "block", color: TH.text2, fontSize: "11px", fontWeight: 600, marginBottom: "5px" }}>
-              3. Port de brassage interne — iODF sur {siteName(fromSite)} *
+              3. Port de brassage interne sur {siteName(fromSite)} *
               {selectedHop.portEntree && <span style={{ color: TH.green, marginLeft: "6px", fontSize: "10px", fontWeight: 400 }}>
                 (recommandation affinée grâce au port de sortie)
               </span>}
@@ -461,11 +535,11 @@ export function HopStep({
             )}
 
             <Sel value={selectedHop.portTransitMid || ""} onChange={val => onSelectTransitMid(n, val)} TH={TH}>
-              <option value="">— Sélectionner le port interne (iODF) —</option>
+              <option value="">— Sélectionner le port de brassage —</option>
               {transitLoading
-                ? <option disabled value="">Chargement des ports iODF…</option>
+                ? <option disabled value="">Chargement des ports de brassage…</option>
                 : transitPorts.length === 0
-                  ? <option disabled value="">Aucun port iODF disponible sur ce site</option>
+                  ? <option disabled value="">Aucun port de brassage disponible sur ce site</option>
                   : (() => {
                       const pNum = (id) => { const m = id.match(/P(\d+)$/); return m ? parseInt(m[1], 10) : 0; };
                       const refNum = pNum(portTransitIn || '');
@@ -484,7 +558,7 @@ export function HopStep({
                       return (
                         <>
                           {recoGroup.length > 0 && <optgroup label="── Recommandés ──">{recoGroup.map(renderOpt)}</optgroup>}
-                          {otherGroup.length > 0 && <optgroup label="── Autres ports iODF libres ──">{otherGroup.map(renderOpt)}</optgroup>}
+                          {otherGroup.length > 0 && <optgroup label="── Autres ports de brassage libres ──">{otherGroup.map(renderOpt)}</optgroup>}
                         </>
                       );
                     })()
@@ -508,9 +582,7 @@ export function HopStep({
               : (
                   !selectedHop.cableId ||
                   !selectedHop.portEntree ||
-                  !selectedHop.portTransitMid ||
-                  (portTransitIn && selectedHop.portTransitMid && portTransitIn !== selectedHop.portTransitMid && !resolvedJarretieres?.j1) ||
-                  (selectedHop.portTransitMid && selectedHop.portEntree && selectedHop.portTransitMid !== selectedHop.portEntree && !resolvedJarretieres?.j2)
+                  !selectedHop.portTransitMid
                 )
           }
           TH={TH}

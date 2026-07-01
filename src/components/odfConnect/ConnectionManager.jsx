@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { supabase } from "../../supabase.js";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import Papa from "papaparse";
 
 function Sel({ value, onChange, children, TH, style = {}, disabled = false }) {
   return (
@@ -29,6 +32,8 @@ export function ConnectionManager({
   const [expandedCableId, setExpandedCableId] = useState(null);
   const [expandedPorts, setExpandedPorts] = useState({});
   const [selectedGroupSlots, setSelectedGroupSlots] = useState({});
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const getBaseRef = (ref) => {
     if (!ref) return "";
@@ -269,9 +274,196 @@ export function ConnectionManager({
     });
   }, [groupedCables, searchQuery, searchType]);
 
+  const getItemReference = (item) => {
+    if (item.isGroup) {
+      return `${item.baseReference} (${item.cables.map(gc => getSlotNameFromRef(gc.cable_reference)).join(" / ")})`;
+    }
+    return item.cable_reference || "";
+  };
+
+  const buildPortChemin = (port, slotPort) => {
+    if (!port || !port.slots) return "—";
+    const slot  = port.slots;
+    const odf   = slot.odfs;
+    const rack  = odf?.racks;
+    const salle = rack?.salles;
+    const site  = salle?.sites;
+    return [
+      site?.name  || "",
+      salle?.name ? `Salle ${salle.name}` : "",
+      rack?.name  || "",
+      odf?.name   || "",
+      slot?.name  ? `Slot ${slot.name}` : "",
+      slotPort    ? `Port ${slotPort}` : ""
+    ].filter(Boolean).join(" / ");
+  };
+
+  const getExportData = async () => {
+    const selected    = filteredItems.filter(item => selectedIds.includes(item.id));
+    const portHeaders = ["CID", "Chemin Source", "Statut Source", "Liaison", "Chemin Destination", "Statut Dest"];
+    // Une section par câble sélectionné : { title, portRows }
+    const sections = [];
+
+    for (const item of selected) {
+      // Titre du document : référence — type
+      const ref   = getItemReference(item);
+      const type  = item.type_lien === "EXTERNE" ? "EXTERNE" : "INTERNE";
+      const title = `${ref} — ${type}`;
+      const portRows = [];
+
+      if (item.isGroup) {
+        const cableList  = item.cables || [];
+        const srcSlotIds = cableList.map(gc => gc.port_source?.slot_id).filter(Boolean);
+        const dstSlotIds = cableList.map(gc => gc.port_dest?.slot_id).filter(Boolean);
+        if (srcSlotIds.length && dstSlotIds.length) {
+          const [srcRes, dstRes] = await Promise.all([
+            supabase.from("ports").select("slot_id, slot_port, statut, cid").in("slot_id", srcSlotIds).order("slot_port"),
+            supabase.from("ports").select("slot_id, slot_port, statut, cid").in("slot_id", dstSlotIds).order("slot_port")
+          ]);
+          const srcData = srcRes.data || [];
+          const dstData = dstRes.data || [];
+          for (const gc of cableList) {
+            const srcPorts = srcData.filter(p => p.slot_id === gc.port_source?.slot_id);
+            const dstPorts = dstData.filter(p => p.slot_id === gc.port_dest?.slot_id);
+            for (let i = 0; i < Math.max(srcPorts.length, dstPorts.length); i++) {
+              const sp = srcPorts[i];
+              const dp = dstPorts[i];
+              portRows.push([
+                sp?.cid || "—",
+                buildPortChemin(gc.port_source, sp?.slot_port),
+                sp?.statut || "—",
+                "→",
+                buildPortChemin(gc.port_dest, dp?.slot_port),
+                dp?.statut || "—",
+              ]);
+            }
+          }
+        }
+      } else {
+        const srcSlotId = item.port_source?.slot_id;
+        const dstSlotId = item.port_dest?.slot_id;
+        if (srcSlotId && dstSlotId) {
+          const [srcRes, dstRes] = await Promise.all([
+            supabase.from("ports").select("slot_port, statut, cid").eq("slot_id", srcSlotId).order("slot_port"),
+            supabase.from("ports").select("slot_port, statut, cid").eq("slot_id", dstSlotId).order("slot_port")
+          ]);
+          const srcPorts = srcRes.data || [];
+          const dstPorts = dstRes.data || [];
+          for (let i = 0; i < Math.max(srcPorts.length, dstPorts.length); i++) {
+            const sp = srcPorts[i];
+            const dp = dstPorts[i];
+            portRows.push([
+              sp?.cid || "—",
+              buildPortChemin(item.port_source, sp?.slot_port),
+              sp?.statut || "—",
+              "→",
+              buildPortChemin(item.port_dest, dp?.slot_port),
+              dp?.statut || "—",
+            ]);
+          }
+        }
+      }
+      sections.push({ title, portRows });
+    }
+    return { portHeaders, sections };
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const allVisibleSelected = filteredItems.length > 0 && filteredItems.every(item => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      const visibleIds = filteredItems.map(item => item.id);
+      setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedIds(prev => [...new Set([...prev, ...filteredItems.map(item => item.id)])]);
+    }
+  };
+
+  const exportToPdf = async () => {
+    const { portHeaders, sections } = await getExportData();
+    if (sections.length === 0) return;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const doc = new jsPDF({ orientation: "landscape" });
+    let totalPorts = 0;
+
+    sections.forEach((section, idx) => {
+      if (idx > 0) doc.addPage();
+
+      // Titre du document (nom du fichier)
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text(`connexions_${dateStr}`, 14, 12);
+
+      // Titre câble en gras — devient le nom de la section
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0);
+      doc.text(section.title, 14, 22);
+
+      // Tableau des ports uniquement (pas de résumé câble)
+      if (section.portRows.length > 0) {
+        autoTable(doc, {
+          head: [portHeaders],
+          body: section.portRows,
+          startY: 28,
+          styles: { fontSize: 8, cellPadding: 2.5 },
+          headStyles: { fillColor: [16, 185, 129], fontStyle: "bold" },
+          columnStyles: {
+            0: { cellWidth: 18 },
+            1: { cellWidth: 72 },
+            2: { cellWidth: 24 },
+            3: { cellWidth: 8 },
+            4: { cellWidth: 72 },
+            5: { cellWidth: 24 },
+          },
+        });
+        totalPorts += section.portRows.length;
+      }
+    });
+
+    doc.save(`connexions_${dateStr}.pdf`);
+    setExportMenuOpen(false);
+    setSuccess && setSuccess(`${sections.length} câble(s) — ${totalPorts} port(s) exportés en PDF`);
+  };
+
+  const exportToExcel = async () => {
+    const { portHeaders, sections } = await getExportData();
+    if (sections.length === 0) return;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    let totalPorts = 0;
+
+    // Chaque câble = une ligne titre (référence — TYPE) + tableau ports
+    const csvParts = sections.map(section => {
+      totalPorts += section.portRows.length;
+      const titleLine = `"${section.title}"`;
+      const portsData = section.portRows.length > 0
+        ? Papa.unparse({ fields: portHeaders, data: section.portRows })
+        : portHeaders.join(",");
+      return titleLine + "\r\n" + portsData;
+    });
+
+    const csv  = csvParts.join("\r\n\r\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `connexions_${dateStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setExportMenuOpen(false);
+    setSuccess && setSuccess(`${sections.length} câble(s) — ${totalPorts} port(s) exportés en Excel`);
+  };
+
   return (
     <div>
-      <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           placeholder="🔍 Rechercher par réf. câble, nom, type fibre..."
           style={{
@@ -283,6 +475,47 @@ export function ConnectionManager({
           <option value="EXTERNE">🌐 EXTERNE</option>
           <option value="INTERNE">🏢 INTERNE</option>
         </Sel>
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setExportMenuOpen(o => !o)}
+            disabled={selectedIds.length === 0}
+            style={{
+              background: selectedIds.length === 0 ? TH.bgInput : TH.blue,
+              color: selectedIds.length === 0 ? TH.text3 : "#fff",
+              border: `1px solid ${selectedIds.length === 0 ? TH.border : TH.blue}`,
+              borderRadius: "8px", padding: "9px 16px", fontSize: "13px", fontWeight: 600,
+              cursor: selectedIds.length === 0 ? "not-allowed" : "pointer", whiteSpace: "nowrap"
+            }}>
+            ⬇ Exporter{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""} ▾
+          </button>
+          {exportMenuOpen && selectedIds.length > 0 && (
+            <div style={{
+              position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 20,
+              background: TH.bgCard, border: `1px solid ${TH.border}`, borderRadius: "8px",
+              boxShadow: "0 8px 24px rgba(0,0,0,.3)", overflow: "hidden", minWidth: "160px"
+            }}>
+              <button onClick={exportToPdf}
+                style={{
+                  display: "block", width: "100%", textAlign: "left", background: "transparent",
+                  border: "none", padding: "10px 14px", color: TH.text1, fontSize: "13px", cursor: "pointer"
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = TH.bgHover}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                📄 Exporter en PDF
+              </button>
+              <button onClick={exportToExcel}
+                style={{
+                  display: "block", width: "100%", textAlign: "left", background: "transparent",
+                  border: "none", borderTop: `1px solid ${TH.border}`, padding: "10px 14px",
+                  color: TH.text1, fontSize: "13px", cursor: "pointer"
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = TH.bgHover}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                📊 Exporter en Excel
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {loadingCables ? (
@@ -293,6 +526,10 @@ export function ConnectionManager({
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
           <thead>
             <tr style={{ background: TH.bgSurface, borderBottom: `2px solid ${TH.border}` }}>
+              <th style={{ width: "36px", padding: "10px 12px", textAlign: "center" }}>
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll}
+                  style={{ cursor: "pointer", accentColor: TH.blue, width: "15px", height: "15px" }} />
+              </th>
               <th style={{ width: "30px", padding: "10px 12px" }}></th>
               {["Référence", "Nom", "Type", "Fibre", "Port Source", "Port Dest"].map(h => (
                 <th key={h} style={{ padding: "10px 12px", textAlign: "left", color: TH.text3, fontWeight: 600, fontSize: "11px" }}>{h}</th>
@@ -305,7 +542,11 @@ export function ConnectionManager({
               const isGroup = item.isGroup;
               return (
                 <React.Fragment key={item.id}>
-                  <tr style={{ borderBottom: `1px solid ${TH.border}`, background: i % 2 === 0 ? "transparent" : TH.bgHover }}>
+                  <tr style={{ borderBottom: `1px solid ${TH.border}`, background: selectedIds.includes(item.id) ? "rgba(59,130,246,.08)" : (i % 2 === 0 ? "transparent" : TH.bgHover) }}>
+                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                      <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)}
+                        style={{ cursor: "pointer", accentColor: TH.blue, width: "15px", height: "15px" }} />
+                    </td>
                     <td style={{ padding: "10px 12px", textAlign: "center", cursor: "pointer", color: TH.blue }}
                         onClick={() => handleExpand(item)}>
                       {isExpanded ? "▼" : "▶"}
@@ -345,7 +586,7 @@ export function ConnectionManager({
                   </tr>
                   {isExpanded && (
                     <tr style={{ background: TH.bgSurface }}>
-                      <td colSpan={7} style={{ padding: "16px 20px" }}>
+                      <td colSpan={8} style={{ padding: "16px 20px" }}>
                         <div style={{ background: TH.bgCard, border: `1px solid ${TH.border}`, borderRadius: "10px", padding: "16px" }}>
                           
                           {isGroup && (

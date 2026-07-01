@@ -61,7 +61,9 @@ export function ConnectionCreator({
     setErr(""); setSuccess("");
   }, [mode, connType]);
 
-  // Auto-générer la référence câble
+  // Auto-générer la référence câble normalisée :
+  // Par ODF  : BET-ZET/S1-R1-ODF3_S2-R2-ODF3
+  // Par slot : BET-ZET/S1-R1-ODF3(S01,S02)_S2-R2-ODF3(S01,S02)
   useEffect(() => {
     if (mode === "equipement") {
       if (src.equipement) {
@@ -69,19 +71,28 @@ export function ConnectionCreator({
       }
       return;
     }
-    if (src.site) {
-      const targetSite = mode === "intersalle" ? src.site : (dst.site || src.site);
-      let type;
-      if (mode === "intersalle") {
-        type = "INT";
-      } else if (mode === "externe") {
-        type = "EXT";
-      } else {
-        type = "INT";
-      }
-      setCableRef(`${type}-${src.site}-${targetSite}-${String(Date.now()).slice(-4)}`);
+    if (!src.site || !src.odf || !dst.odf) return;
+
+    const srcSalle = src.salle ? src.salle.split('-').pop() : '';
+    const srcRack  = src.rack  ? src.rack.split('-').pop()  : '';
+    const srcOdf   = src.odf   ? src.odf.split('-').pop()   : '';
+    const dstSalle = dst.salle ? dst.salle.split('-').pop() : '';
+    const dstRack  = dst.rack  ? dst.rack.split('-').pop()  : '';
+    const dstOdf   = dst.odf   ? dst.odf.split('-').pop()   : '';
+    const targetSite = mode === "intersalle" ? src.site : (dst.site || src.site);
+
+    if (connType === "odf") {
+      // Par ODF entier — pas de suffixe de slot
+      setCableRef(`${src.site}-${targetSite}/${srcSalle}-${srcRack}-${srcOdf}_${dstSalle}-${dstRack}-${dstOdf}`);
+    } else {
+      // Par slot — liste des slots sélectionnés entre parenthèses
+      const srcSlots = (src.selectedSlots || []).map(id => id.split('_').pop()).join(',');
+      const dstSlots = (dst.selectedSlots || []).map(id => id.split('_').pop()).join(',');
+      const srcSuffix = srcSlots ? `(${srcSlots})` : '';
+      const dstSuffix = dstSlots ? `(${dstSlots})` : '';
+      setCableRef(`${src.site}-${targetSite}/${srcSalle}-${srcRack}-${srcOdf}${srcSuffix}_${dstSalle}-${dstRack}-${dstOdf}${dstSuffix}`);
     }
-  }, [src.site, src.equipement, dst.site, mode]);
+  }, [src.site, src.salle, src.rack, src.odf, src.equipement, src.selectedSlots, dst.site, dst.salle, dst.rack, dst.odf, dst.selectedSlots, mode, connType]);
 
   const canCreate = mode === "equipement"
     ? !!(src.port && dst.selectedPort)

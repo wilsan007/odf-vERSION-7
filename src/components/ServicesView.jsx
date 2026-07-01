@@ -7,6 +7,7 @@ import { ServiceCard } from "./services/ServiceCard.jsx";
 import { ServiceWizard } from "./services/ServiceWizard.jsx";
 import { ServiceEditModal } from "./services/ServiceEditModal.jsx";
 import { ServiceDetailModal } from "./services/ServiceDetailModal.jsx";
+import { ServiceDeleteTab } from "./services/ServiceDeleteTab.jsx";
 import { PortPicker } from "./services/PortPicker.jsx";
 
 // Re-export PortPicker for backward compatibility
@@ -23,6 +24,7 @@ export default function ServicesView({ t, TH, user }) {
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
 
   // Filtres
   const [search, setSearch] = useState("");
@@ -171,78 +173,120 @@ export default function ServicesView({ t, TH, user }) {
 
   if (loading) return <Spinner TH={TH} />;
 
+  const serviceTabs = t.serviceTabs || ["Services", "Suppression"];
+
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <div style={{ color: TH.text2, fontSize: "12px" }}>{filteredServices.length} / {services.length} service(s)</div>
-        <Btn onClick={() => setShowWizard(true)} TH={TH}>+ {t.add} service</Btn>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Barre d'onglets */}
+      <div style={{
+        display: "flex", gap: "4px", padding: "12px 20px",
+        borderBottom: `1px solid ${TH.border}`, flexShrink: 0
+      }}>
+        {serviceTabs.map((lb, i) => (
+          <button
+            key={i}
+            onClick={() => setActiveTab(i)}
+            style={{
+              padding: "6px 14px", borderRadius: "8px",
+              background: activeTab === i ? TH.blue : "transparent",
+              color: activeTab === i ? "#fff" : TH.text2,
+              border: `1px solid ${activeTab === i ? TH.blue : TH.border}`,
+              fontSize: "12px", fontWeight: 600, cursor: "pointer"
+            }}>
+            {lb}
+          </button>
+        ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr auto", gap: "10px", marginBottom: "16px" }}>
-        <Inp value={search} onChange={setSearch} placeholder="Rechercher par CID…" TH={TH} />
-        <Sel value={filterClient} onChange={setFilterClient} TH={TH}>
-          <option value="">Tous les clients</option>
-          {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
-        </Sel>
-        <Sel value={filterCable} onChange={setFilterCable} TH={TH}>
-          <option value="">Toutes les sources</option>
-          {cableOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-        </Sel>
-        <Sel value={filterCapacite} onChange={setFilterCapacite} TH={TH}>
-          <option value="">Toutes les capacités</option>
-          {capaciteOptions.map(c => <option key={c} value={c}>{c} Gbps</option>)}
-        </Sel>
-        <Btn variant="ghost" onClick={resetFilters} TH={TH}>Réinitialiser</Btn>
-      </div>
+      {/* Contenu de l'onglet actif */}
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        {activeTab === 0 && (
+          <div style={{ height: "100%", overflowY: "auto", padding: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <div style={{ color: TH.text2, fontSize: "12px" }}>{filteredServices.length} / {services.length} service(s)</div>
+              <Btn onClick={() => setShowWizard(true)} TH={TH}>+ {t.add} service</Btn>
+            </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        {filteredServices.map(s => (
-          <ServiceCard
-            key={s.id}
-            service={s}
-            onSelect={setSelectedService}
-            onEdit={startEdit}
-            onToggleStatut={toggleStatut}
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr auto", gap: "10px", marginBottom: "16px" }}>
+              <Inp value={search} onChange={setSearch} placeholder="Rechercher par CID…" TH={TH} />
+              <Sel value={filterClient} onChange={setFilterClient} TH={TH}>
+                <option value="">Tous les clients</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+              </Sel>
+              <Sel value={filterCable} onChange={setFilterCable} TH={TH}>
+                <option value="">Toutes les sources</option>
+                {cableOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </Sel>
+              <Sel value={filterCapacite} onChange={setFilterCapacite} TH={TH}>
+                <option value="">Toutes les capacités</option>
+                {capaciteOptions.map(c => <option key={c} value={c}>{c} Gbps</option>)}
+              </Sel>
+              <Btn variant="ghost" onClick={resetFilters} TH={TH}>Réinitialiser</Btn>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {filteredServices.map(s => (
+                <ServiceCard
+                  key={s.id}
+                  service={s}
+                  onSelect={setSelectedService}
+                  onEdit={startEdit}
+                  onToggleStatut={toggleStatut}
+                  TH={TH}
+                />
+              ))}
+              {!filteredServices.length && (
+                <div style={{ textAlign: "center", color: TH.text3, paddingTop: "40px" }}>{t.noData}</div>
+              )}
+            </div>
+
+            <ServiceWizard
+              open={showWizard}
+              onClose={() => setShowWizard(false)}
+              onDone={onWizardDone}
+              sites={sitesList}
+              cables={cablesInterSites}
+              fournisseurs={fournisseurs}
+              clients={clients}
+              userLabel={userLabel}
+              TH={TH}
+              t={t}
+            />
+
+            <ServiceEditModal
+              editingService={editingService}
+              editLabel={editLabel} setEditLabel={setEditLabel}
+              editClient={editClient} setEditClient={setEditClient}
+              editFourn={editFourn} setEditFourn={setEditFourn}
+              editStatut={editStatut} setEditStatut={setEditStatut}
+              clients={clients}
+              fournisseurs={fournisseurs}
+              onClose={() => setEditingService(null)}
+              onSave={handleSaveEdit}
+              TH={TH}
+            />
+
+            <ServiceDetailModal
+              service={selectedService}
+              routeInfo={selectedService ? routes[selectedService.id] : null}
+              onClose={() => setSelectedService(null)}
+              TH={TH}
+            />
+          </div>
+        )}
+
+        {activeTab === 1 && (
+          <ServiceDeleteTab
+            services={services}
+            routes={routes}
+            user={user}
+            userLabel={userLabel}
+            onDeleted={load}
+            t={t}
             TH={TH}
           />
-        ))}
-        {!filteredServices.length && (
-          <div style={{ textAlign: "center", color: TH.text3, paddingTop: "40px" }}>{t.noData}</div>
         )}
       </div>
-
-      <ServiceWizard
-        open={showWizard}
-        onClose={() => setShowWizard(false)}
-        onDone={onWizardDone}
-        sites={sitesList}
-        cables={cablesInterSites}
-        fournisseurs={fournisseurs}
-        clients={clients}
-        userLabel={userLabel}
-        TH={TH}
-        t={t}
-      />
-
-      <ServiceEditModal
-        editingService={editingService}
-        editLabel={editLabel} setEditLabel={setEditLabel}
-        editClient={editClient} setEditClient={setEditClient}
-        editFourn={editFourn} setEditFourn={setEditFourn}
-        editStatut={editStatut} setEditStatut={setEditStatut}
-        clients={clients}
-        fournisseurs={fournisseurs}
-        onClose={() => setEditingService(null)}
-        onSave={handleSaveEdit}
-        TH={TH}
-      />
-
-      <ServiceDetailModal
-        service={selectedService}
-        routeInfo={selectedService ? routes[selectedService.id] : null}
-        onClose={() => setSelectedService(null)}
-        TH={TH}
-      />
     </div>
   );
 }
