@@ -18,7 +18,10 @@ export default function CablesView({ t, TH }) {
   const load = () => { 
     setLoading(true); 
     getCables().then(r => {
-      setCables(r.data || []);
+      // Filtrer pour exclure les jarretières de transit dynamique créées pour un service (port-to-port, contiennent Pxx dans leur référence)
+      const allCables = r.data || [];
+      const infraCables = allCables.filter(c => !/P\d+/i.test(c.cable_reference || ""));
+      setCables(infraCables);
       setLoading(false);
     }); 
   };

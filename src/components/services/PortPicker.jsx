@@ -19,7 +19,7 @@ export function PortPicker({ value, onChange, ports, TH, accent }) {
   const portOf = (id) => ports.find(p => p.id === id);
   const init   = portOf(value);
 
-  const [siteId,  setSiteId]  = useState(init?.slots?.odfs?.racks?.sites?.id || "");
+  const [siteId,  setSiteId]  = useState(init?.slots?.odfs?.racks?.salles?.sites?.id || "");
   const [salleId, setSalleId] = useState(init?.slots?.odfs?.racks?.salles?.id || "");
   const [rackId,  setRackId]  = useState(init?.slots?.odfs?.racks?.id || "");
   const [odfId,   setOdfId]   = useState(init?.slots?.odfs?.id || "");
@@ -29,7 +29,7 @@ export function PortPicker({ value, onChange, ports, TH, accent }) {
     if (!value) return;
     const p = portOf(value);
     if (p) {
-      setSiteId(p.slots?.odfs?.racks?.sites?.id  || "");
+      setSiteId(p.slots?.odfs?.racks?.salles?.sites?.id  || "");
       setSalleId(p.slots?.odfs?.racks?.salles?.id || "");
       setRackId(p.slots?.odfs?.racks?.id         || "");
       setOdfId(p.slots?.odfs?.id                 || "");
@@ -46,7 +46,7 @@ export function PortPicker({ value, onChange, ports, TH, accent }) {
     return [...m.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   };
 
-  const sites   = uniq(ports, p => p.slots?.odfs?.racks?.sites);
+  const sites   = uniq(ports, p => p.slots?.odfs?.racks?.salles?.sites);
   const salles  = uniq(
     ports.filter(p => p.slots?.odfs?.racks?.sites?.id === siteId),
     p => p.slots?.odfs?.racks?.salles

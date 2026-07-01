@@ -5,6 +5,8 @@ import {
   getRacks, createRack, deleteRack,
   getOdfs, createOdf, deleteOdf,
   getSlots, createSlot, deleteSlot,
+  getEquipements, createEquipement, deleteEquipement,
+  getEquipementSlots, createEquipementSlot, deleteEquipementSlot,
 } from "../supabase.js";
 import { Btn, Inp, Confirm } from "./common/UI.jsx";
 
@@ -41,6 +43,8 @@ export default function ManageInfra({ t, TH }) {
         {tab === 2 && <RacksCRUD t={t} TH={TH} />}
         {tab === 3 && <OdfsCRUD t={t} TH={TH} />}
         {tab === 4 && <SlotsCRUD t={t} TH={TH} />}
+        {tab === 5 && <EquipementsCRUD t={t} TH={TH} />}
+        {tab === 6 && <EquipementSlotsCRUD t={t} TH={TH} />}
       </div>
     </div>
   );
@@ -315,14 +319,141 @@ function SlotsCRUD({ t, TH }) {
       t={t} 
       TH={TH}
       extraBefore={
-        <select 
-          value={selOdf} 
+        <select
+          value={selOdf}
           onChange={e => setSelOdf(e.target.value)}
           style={{ background: TH.bgInput, border: `1px solid ${TH.border}`, borderRadius: "8px", padding: "7px 10px", color: TH.text1, fontSize: "12px" }}>
           <option value="">Tous ODFs</option>
           {odfs.map(o => <option key={o.id} value={o.id}>{o.name} — {o.id}</option>)}
         </select>
-      } 
+      }
+    />
+  );
+}
+
+function EquipementsCRUD({ t, TH }) {
+  const [items, setItems] = useState([]);
+  const [racks, setRacks] = useState([]);
+  const [selRack, setSelRack] = useState("");
+
+  useEffect(() => { getRacks().then(r => setRacks(r.data || [])); }, []);
+  const load = () => getEquipements(selRack || null).then(r => setItems(r.data || []));
+  useEffect(() => { load(); }, [selRack]);
+
+  return (
+    <CrudList
+      items={items}
+      idKey="id"
+      nameKey="name"
+      subKey
+      onAdd={(name, type) => {
+        if (!selRack) {
+          alert("Veuillez sélectionner un rack d'abord.");
+          return;
+        }
+        const eqName = name.toUpperCase();
+        createEquipement({ id: `${selRack}-${eqName}`, rack_id: selRack, name: eqName, type: type || null }).then(res => {
+          if (res.error) alert("Erreur lors de la création de l'équipement: " + res.error.message);
+          else load();
+        });
+      }}
+      onDelete={id => deleteEquipement(id).then(res => {
+        if (res.error) alert("Erreur lors de la suppression de l'équipement: " + res.error.message);
+        else load();
+      })}
+      addLabel={`${t.equipementName} (ex: EQ1)`}
+      addLabel2={t.equipementType}
+      t={t}
+      TH={TH}
+      renderItem={(item) => (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span className="font-mono" style={{ color: TH.text1, fontSize: "13px", fontWeight: 600 }}>{item.name}</span>
+          <span style={{ color: TH.text3, fontSize: "11px" }}>{item.id}</span>
+          {item.type && (
+            <span style={{
+              background: `${TH.purple}22`, color: TH.purple, border: `1px solid ${TH.purple}44`,
+              borderRadius: "6px", padding: "1px 7px", fontSize: "10px", fontWeight: 600
+            }}>
+              {item.type}
+            </span>
+          )}
+          {item.racks?.name && <span style={{ color: TH.text3, fontSize: "10px" }}>{item.racks.sites?.name} / {item.racks.name}</span>}
+        </div>
+      )}
+      extraBefore={
+        <select
+          value={selRack}
+          onChange={e => setSelRack(e.target.value)}
+          style={{ background: TH.bgInput, border: `1px solid ${TH.border}`, borderRadius: "8px", padding: "7px 10px", color: TH.text1, fontSize: "12px" }}>
+          <option value="">Tous racks</option>
+          {racks.map(r => <option key={r.id} value={r.id}>{r.name} — {r.id}</option>)}
+        </select>
+      }
+    />
+  );
+}
+
+function EquipementSlotsCRUD({ t, TH }) {
+  const [items, setItems] = useState([]);
+  const [equipements, setEquipements] = useState([]);
+  const [selEq, setSelEq] = useState("");
+  useEffect(() => { getEquipements().then(r => setEquipements(r.data || [])); }, []);
+  const load = () => getEquipementSlots(selEq || null).then(r => setItems(r.data || []));
+  useEffect(() => { load(); }, [selEq]);
+
+  return (
+    <CrudList
+      items={items}
+      idKey="id"
+      nameKey="name"
+      subKey
+      onAdd={(name, portsCount) => {
+        if (!selEq) {
+          alert("Veuillez sélectionner un équipement d'abord.");
+          return;
+        }
+        const match = name.match(/\d+/);
+        const num = match ? parseInt(match[0], 10) : null;
+        if (!num) {
+          alert("Veuillez entrer un numéro de slot valide (ex: 5 ou SL05)");
+          return;
+        }
+        const count = parseInt(portsCount, 10) || 12;
+        const slotName = 'SL' + String(num).padStart(2, '0');
+        createEquipementSlot({ id: `${selEq}_${slotName}`, equipement_id: selEq, slot_num: num, name: slotName, ports_count: count }).then(res => {
+          if (res.error) alert("Erreur lors de la création du slot équipement: " + res.error.message);
+          else load();
+        });
+      }}
+      onDelete={id => deleteEquipementSlot(id).then(res => {
+        if (res.error) alert("Erreur lors de la suppression du slot équipement: " + res.error.message);
+        else load();
+      })}
+      addLabel={t.equipementSlotName}
+      addLabel2={t.portsCount}
+      t={t}
+      TH={TH}
+      renderItem={(item) => (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span className="font-mono" style={{ color: TH.text1, fontSize: "13px", fontWeight: 600 }}>{item.name}</span>
+          <span style={{ color: TH.text3, fontSize: "11px" }}>{item.id}</span>
+          <span style={{
+            background: `${TH.cyan}22`, color: TH.cyan, border: `1px solid ${TH.cyan}44`,
+            borderRadius: "6px", padding: "1px 7px", fontSize: "10px", fontWeight: 600
+          }}>
+            {item.ports_count} ports
+          </span>
+        </div>
+      )}
+      extraBefore={
+        <select
+          value={selEq}
+          onChange={e => setSelEq(e.target.value)}
+          style={{ background: TH.bgInput, border: `1px solid ${TH.border}`, borderRadius: "8px", padding: "7px 10px", color: TH.text1, fontSize: "12px" }}>
+          <option value="">{t.allEquipements}</option>
+          {equipements.map(e => <option key={e.id} value={e.id}>{e.name} — {e.id}</option>)}
+        </select>
+      }
     />
   );
 }
