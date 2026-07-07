@@ -31,6 +31,12 @@ export function HopStep({
   transitData,
   onSelectTransitMid2,
   onSelectIntersalleCable,
+  salleA,
+  salleB,
+  intersalleRecoA,
+  intersalleRecoB,
+  transitDataA,
+  transitDataB,
 }) {
   const fromSite = pathSites[n];
   const toSite = pathSites[n + 1];
@@ -129,6 +135,39 @@ export function HopStep({
               </div>
             </div>
           )}
+
+          {/* ── Bloc intersalle siteA : si salleA choisie ≠ salle du port de départ ── */}
+          {salleA && selectedHop.portEntree && (() => {
+            const allPorts = transitDataA ? [...transitDataA.internalPorts, ...transitDataA.externalPorts] : [];
+            const portSalle = allPorts.find(p => p.id === selectedHop.portEntree)?.salle_id;
+            if (!portSalle || portSalle === salleA) return null;
+            return (
+              <div style={{
+                background: `${TH.gold}10`, border: `1px solid ${TH.gold}44`,
+                borderRadius: "10px", padding: "14px 16px"
+              }}>
+                <div style={{ fontSize: "10px", color: TH.gold, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "10px" }}>
+                  🔀 Connexion intersalle requise sur {siteName(fromSite)} — Salle {salleA} → Salle {portSalle}
+                </div>
+                {intersalleRecoA && intersalleRecoA.length > 0 ? (
+                  <div style={{ fontSize: "12px", color: TH.text2 }}>
+                    <span style={{ color: TH.green, fontWeight: 700 }}>✓ Câble intersalle détecté :</span>{" "}
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", color: TH.text1 }}>
+                      {intersalleRecoA[0]?.intersalleCable?.cable_reference}
+                    </span>
+                    <div style={{ fontSize: "11px", color: TH.text3, marginTop: "4px" }}>
+                      Port de brassage : {formatPortDisplay(intersalleRecoA[0]?.portTransitMid)} → {formatPortDisplay(intersalleRecoA[0]?.portTransitMid2)}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "12px", color: TH.red }}>
+                    ⚠ Aucun câble intersalle trouvé entre Salle {salleA} et Salle {portSalle} sur {siteName(fromSite)}.
+                    Créez d'abord un câble INTERNE entre ces deux salles dans le module ODF Connect.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <div style={{
@@ -567,6 +606,39 @@ export function HopStep({
           </div>
         </div>
       )}
+
+      {/* ── Bloc intersalle siteB : si salleB choisie ≠ salle du port d'arrivée finale ── */}
+      {salleB && n + 1 === totalHops && selectedHop.portSortie && (() => {
+        const allPorts = transitDataB ? [...transitDataB.internalPorts, ...transitDataB.externalPorts] : [];
+        const portSalle = allPorts.find(p => p.id === selectedHop.portSortie)?.salle_id;
+        if (!portSalle || portSalle === salleB) return null;
+        return (
+          <div style={{
+            background: `${TH.cyan}10`, border: `1px solid ${TH.cyan}44`,
+            borderRadius: "10px", padding: "14px 16px"
+          }}>
+            <div style={{ fontSize: "10px", color: TH.cyan, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "10px" }}>
+              🔀 Connexion intersalle requise sur {siteName(toSite)} — Salle {portSalle} → Salle {salleB}
+            </div>
+            {intersalleRecoB && intersalleRecoB.length > 0 ? (
+              <div style={{ fontSize: "12px", color: TH.text2 }}>
+                <span style={{ color: TH.green, fontWeight: 700 }}>✓ Câble intersalle détecté :</span>{" "}
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: TH.text1 }}>
+                  {intersalleRecoB[0]?.intersalleCable?.cable_reference}
+                </span>
+                <div style={{ fontSize: "11px", color: TH.text3, marginTop: "4px" }}>
+                  Port de brassage : {formatPortDisplay(intersalleRecoB[0]?.portTransitMid)} → {formatPortDisplay(intersalleRecoB[0]?.portTransitMid2)}
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: "12px", color: TH.red }}>
+                ⚠ Aucun câble intersalle trouvé entre Salle {portSalle} et Salle {salleB} sur {siteName(toSite)}.
+                Créez d'abord un câble INTERNE entre ces deux salles dans le module ODF Connect.
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div style={{ display: "flex", gap: "10px", justifyContent: "space-between", marginTop: "4px" }}>
         <Btn onClick={() => {
