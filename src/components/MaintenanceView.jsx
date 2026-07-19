@@ -16,9 +16,19 @@ const STATUTS = ["PLANIFIE", "EN_COURS", "FAIT", "ANNULE"];
 const PRIOS = ["BASSE", "NORMALE", "HAUTE", "CRITIQUE"];
 const CATS = ["SLTE", "LTE", "PSB", "PFE", "TEMS", "AUTRE"];
 
-const locString = (it) =>
-  [it.emp_salle, it.emp_halle, it.emp_niveau, it.emp_rack, it.emp_chassis, it.emp_position]
+const NA_LOC = new Set(["", "N/A", "NA", "UNAVAIL", "NONE", "-"]);
+const cleanLoc = (v) => (v && !NA_LOC.has(String(v).toUpperCase()) ? v : "");
+
+const locString = (it) => {
+  // 1. Champs de localisation physique (v13 — emp_*)
+  const emp = [it.emp_salle, it.emp_halle, it.emp_niveau, it.emp_rack, it.emp_chassis, it.emp_position]
     .filter(Boolean).join(" · ");
+  if (emp) return emp;
+  // 2. Fallback : champs d'origine de l'import Excel (v10)
+  const imp = [cleanLoc(it.equip_location), cleanLoc(it.loc_bay), cleanLoc(it.loc_shelf), cleanLoc(it.loc_slot)]
+    .filter(Boolean).join(" · ");
+  return imp || "";
+};
 
 function typeColor(TH, t) {
   if (t === "REMPLACEMENT") return TH.orange;
