@@ -14,6 +14,12 @@ import SearchView from "./components/SearchView.jsx";
 import ManageInfra from "./components/ManageInfra.jsx";
 import OdfConnectView from "./components/OdfConnectView.jsx";
 import ServicesView from "./components/ServicesView.jsx";
+import InventoryView from "./components/InventoryView.jsx";
+import TopologyView from "./components/TopologyView.jsx";
+import DocumentsView from "./components/DocumentsView.jsx";
+import CatalogueView from "./components/CatalogueView.jsx";
+import MaintenanceView from "./components/MaintenanceView.jsx";
+import { getOpenMaintenances } from "./supabase.js";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -24,6 +30,7 @@ export default function App() {
   const [view, setView] = useState("dashboard");
   const [col, setCol] = useState(false);
   const [alertCount, setAlertCount] = useState(0);
+  const [maintAlert, setMaintAlert] = useState(0);
 
   const TH = THEMES[theme];
   const t = T[lang];
@@ -58,6 +65,12 @@ export default function App() {
       const u = (r.data || []).filter(p => p.statut === "INCONNU").length;
       setAlertCount(u);
     });
+    // Maintenances en retard (date prévue dépassée, non terminées)
+    getOpenMaintenances().then(r => {
+      if (r.error) { setMaintAlert(0); return; }
+      const today = new Date().toISOString().slice(0, 10);
+      setMaintAlert((r.data || []).filter(m => m.date_prevue < today).length);
+    }).catch(() => setMaintAlert(0));
   }, [session, view, demoUser]);
 
   const doLogout = async () => {
@@ -99,6 +112,11 @@ export default function App() {
     manage: <ManageInfra t={t} TH={TH} />,
     odfConnect: <OdfConnectView t={t} TH={TH} />,
     services: <ServicesView t={t} TH={TH} user={session?.user || demoUser} />,
+    inventory: <InventoryView t={t} TH={TH} />,
+    topology: <TopologyView t={t} TH={TH} />,
+    documents: <DocumentsView t={t} TH={TH} />,
+    catalogue: <CatalogueView t={t} TH={TH} />,
+    maintenance: <MaintenanceView t={t} TH={TH} user={session?.user || demoUser} />,
   };
 
   const VIEW_TITLES = {
@@ -107,6 +125,11 @@ export default function App() {
     manage: t.manage,
     odfConnect: t.odfConnect,
     services: t.services,
+    inventory: t.inventory,
+    topology: t.topology,
+    documents: t.documents,
+    catalogue: t.catalogue,
+    maintenance: t.maintenance,
   };
 
   return (
@@ -125,6 +148,7 @@ export default function App() {
         user={session?.user || demoUser}
         onLogout={doLogout}
         alertCount={alertCount}
+        maintAlert={maintAlert}
       />
       <div style={{ flex: 1, display: "flex", flexTriangle: "column", flexDirection: "column", overflow: "hidden" }}>
         <Topbar title={VIEW_TITLES[view]} t={t} TH={TH} />

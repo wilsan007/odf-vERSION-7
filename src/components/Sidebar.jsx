@@ -7,6 +7,11 @@ const NAV_ITEMS = [
   { key: "manage",     icon: "🏗" },
   { key: "odfConnect", icon: "🔗" },
   { key: "services",   icon: "⚡" },
+  { key: "inventory",  icon: "📦" },
+  { key: "topology",   icon: "🌐" },
+  { key: "documents",  icon: "📄" },
+  { key: "catalogue",  icon: "🗂" },
+  { key: "maintenance", icon: "🔧" },
 ];
 
 export default function Sidebar({
@@ -18,11 +23,12 @@ export default function Sidebar({
   setLang, 
   theme, 
   setTheme, 
-  t, 
-  TH, 
-  user, 
-  onLogout, 
-  alertCount
+  t,
+  TH,
+  user,
+  onLogout,
+  alertCount,
+  maintAlert
 }) {
   return (
     <div style={{
@@ -108,8 +114,8 @@ export default function Sidebar({
                 padding: col ? "12px 0" : "9px 0 9px 16px",
                 justifyContent: col ? "center" : "flex-start",
                 background: active ? "rgba(59,130,246,0.14)" : "transparent",
+                borderTop: "none", borderRight: "none", borderBottom: "none",
                 borderLeft: active ? "3px solid #3B82F6" : "3px solid transparent",
-                border: "none", 
                 cursor: "pointer", 
                 transition: "background .12s",
                 position: "relative"
@@ -137,21 +143,21 @@ export default function Sidebar({
                   {t[key]}
                 </span>
               )}
-              {key === "alerts" && alertCount > 0 && (
-                <span style={{
-                  background: "#EF4444", 
-                  color: "#fff", 
+              {key === "maintenance" && maintAlert > 0 && (
+                <span title={`${maintAlert} maintenance(s) en retard`} style={{
+                  background: "#EF4444",
+                  color: "#fff",
                   borderRadius: "10px",
-                  fontSize: "10px", 
-                  fontWeight: 700, 
-                  padding: "1px 6px", 
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  padding: "1px 6px",
                   lineHeight: "16px",
                   position: col ? "absolute" : "static",
-                  top: col ? "6px" : "auto", 
+                  top: col ? "6px" : "auto",
                   right: col ? "6px" : "auto",
-                  marginLeft: col ? "0" : "auto", 
+                  marginLeft: col ? "0" : "auto",
                   marginRight: col ? "0" : "12px"
-                }}>{alertCount}</span>
+                }}>{maintAlert}</span>
               )}
             </button>
           );

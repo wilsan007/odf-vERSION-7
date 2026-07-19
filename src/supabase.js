@@ -333,6 +333,151 @@ export const addHistory = (data) =>
 export const getHistory = (limit = 100) =>
   supabase.from('history').select('*').order('created_at', { ascending: false }).limit(limit)
 
+// ─── Inventaire d'actifs / As-Built (module v10) ─────────────────────────────
+// Documents (une révision d'inventaire par station)
+export const getInventaireDocuments = () =>
+  supabase.from('inventaire_documents').select('*').order('station')
+
+// Upsert d'un document (remplace la révision existante du même id)
+export const upsertInventaireDocument = (data) =>
+  supabase.from('inventaire_documents')
+    .upsert({ ...data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    .select().single()
+
+export const deleteInventaireDocument = (id) =>
+  supabase.from('inventaire_documents').delete().eq('id', id)
+
+// Items d'inventaire — filtrés par station (chaque station < 250 lignes,
+// on reste donc sous la limite max_rows de PostgREST)
+export const getInventaireItems = (station) => {
+  let q = supabase.from('inventaire_items').select('*').order('id')
+  if (station) q = q.eq('station', station)
+  return q
+}
+
+// Items d'un document précis (une révision) — pour la comparaison inter-révisions
+export const getInventaireItemsByDocument = (documentId) =>
+  supabase.from('inventaire_items').select('*').eq('document_id', documentId).order('id')
+
+// Statistiques agrégées par station (vue → contourne max_rows)
+export const getInventaireStats = () =>
+  supabase.from('vue_inventaire_stats').select('*').order('station')
+
+// Catalogue matériel : références dédoublonnées (module B / vue v12)
+export const getCataloguePieces = () =>
+  supabase.from('vue_catalogue_pieces').select('*').order('part_number')
+
+// ─── Localisation & Maintenance (module E / v13) ─────────────────────────────
+// Met à jour la localisation physique + le port relié d'une pièce d'inventaire
+export const updateItemLocation = (id, data) =>
+  supabase.from('inventaire_items')
+    .update({ ...data, emp_updated_at: new Date().toISOString() })
+    .eq('id', id).select().single()
+
+// Résout le service (CID) desservi par un port ODF donné.
+// Cherche : service.port_id → jonction (entrée/sortie) → port.cid en dernier recours.
+export const getServiceForPort = async (portId) => {
+  if (!portId) return { data: null }
+  const s1 = await supabase.from('services')
+    .select('cid, label, statut').eq('port_id', portId).limit(1)
+  if (s1.data && s1.data.length) return { data: s1.data[0] }
+
+  const j = await supabase.from('service_jonctions')
+    .select('service_id').or(`port_entree_id.eq.${portId},port_sortie_id.eq.${portId}`).limit(1)
+  if (j.data && j.data.length) {
+    const s2 = await supabase.from('services')
+      .select('cid, label, statut').eq('id', j.data[0].service_id).limit(1)
+    if (s2.data && s2.data.length) return { data: s2.data[0] }
+  }
+
+  const p = await supabase.from('ports').select('cid, statut').eq('id', portId).limit(1)
+  if (p.data && p.data.length && p.data[0].cid) return { data: { cid: p.data[0].cid, label: null, statut: p.data[0].statut } }
+  return { data: null }
+}
+
+// Maintenances (vue enrichie : pièce + retard calculé)
+export const getMaintenances = () =>
+  supabase.from('vue_maintenances').select('*').order('date_prevue')
+
+// Uniquement les maintenances ouvertes (pour badges/signalement) — colonnes légères
+export const getOpenMaintenances = () =>
+  supabase.from('maintenances').select('id, item_id, statut, date_prevue, type, priorite')
+    .in('statut', ['PLANIFIE', 'EN_COURS'])
+
+export const createMaintenance = (data) =>
+  supabase.from('maintenances').insert(data).select().single()
+
+export const updateMaintenance = (id, data) =>
+  supabase.from('maintenances').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+export const deleteMaintenance = (id) =>
+  supabase.from('maintenances').delete().eq('id', id)
+
+// Supprime tous les items d'un document (avant réimport de la même révision)
+export const deleteInventaireItemsByDocument = (documentId) =>
+  supabase.from('inventaire_items').delete().eq('document_id', documentId)
+
+// Insertion en lot par paquets de 500 (évite les payloads trop volumineux)
+export const bulkInsertInventaireItems = async (rows) => {
+  const CHUNK = 500
+  let inserted = 0
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const slice = rows.slice(i, i + CHUNK)
+    const { error } = await supabase.from('inventaire_items').insert(slice)
+    if (error) return { error, inserted }
+    inserted += slice.length
+  }
+  return { error: null, inserted }
+}
+
+// Import complet d'un document parsé : upsert doc → purge items → réinsertion
+export const importInventaireDocument = async ({ document, items }) => {
+  const { error: docErr } = await upsertInventaireDocument(document)
+  if (docErr) return { error: docErr, inserted: 0 }
+  const { error: delErr } = await deleteInventaireItemsByDocument(document.id)
+  if (delErr) return { error: delErr, inserted: 0 }
+  return bulkInsertInventaireItems(items)
+}
+
+// ─── Topologie DARE1 : Segments / Line Pairs (module v11) ────────────────────
+export const getTopoSegments = () =>
+  supabase.from('topo_segments').select('*').order('systeme').order('nom')
+
+export const createTopoSegment = (data) =>
+  supabase.from('topo_segments').insert(data).select().single()
+
+export const updateTopoSegment = (id, data) =>
+  supabase.from('topo_segments').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+export const deleteTopoSegment = (id) =>
+  supabase.from('topo_segments').delete().eq('id', id)
+
+export const getTopoLinePairs = (segmentId) => {
+  let q = supabase.from('topo_line_pairs').select('*').order('numero')
+  if (segmentId) q = q.eq('segment_id', segmentId)
+  return q
+}
+
+export const createTopoLinePair = (data) =>
+  supabase.from('topo_line_pairs').insert(data).select().single()
+
+export const updateTopoLinePair = (id, data) =>
+  supabase.from('topo_line_pairs').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+export const deleteTopoLinePair = (id) =>
+  supabase.from('topo_line_pairs').delete().eq('id', id)
+
+// Upsert en lot (utilisé par « Générer depuis l'inventaire »)
+export const upsertTopoSegments = (rows) =>
+  supabase.from('topo_segments').upsert(rows, { onConflict: 'id', ignoreDuplicates: true }).select()
+
+export const upsertTopoLinePairs = (rows) =>
+  supabase.from('topo_line_pairs').upsert(rows, { onConflict: 'id', ignoreDuplicates: true }).select()
+
+// Pont : ce qui est réellement installé, agrégé par (station, segment, line_pair)
+export const getTopoInventaire = () =>
+  supabase.from('vue_topo_inventaire').select('*').order('station')
+
 // ─── Stats dashboard ─────────────────────────────────────────────────────────
 // Statistiques agrégées par site via vue_stats_par_site (contourne max_rows=1000)
 export const getSiteStats = () =>

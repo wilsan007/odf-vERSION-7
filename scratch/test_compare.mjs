@@ -1,0 +1,15 @@
+import * as XLSX from "xlsx";
+import { readFileSync } from "fs";
+import { parseWorkbook } from "../src/components/inventory/importParser.js";
+import { compareDocuments } from "../src/components/documents/compareEngine.js";
+const dir="/Users/awalehosman/Downloads/";
+const bos=parseWorkbook(XLSX.read(readFileSync(dir+"DARE1_Bosaso_Station Inventory_Issue 1 0_NFiles.xlsx"),{type:"buffer"}),"Bosaso").items;
+const mog=parseWorkbook(XLSX.read(readFileSync(dir+"DARE1_Mogadishu_Station Inventory_Issue 1.0_NFiles.xlsx"),{type:"buffer"}),"Mogadishu").items;
+console.log("=== Bosaso vs Bosaso (identique) ===");
+const same=compareDocuments(bos,bos);
+console.log(JSON.stringify(same.summary));
+console.log("=== Bosaso vs Mogadishu ===");
+const diff=compareDocuments(bos,mog);
+console.log(JSON.stringify(diff.summary));
+if(diff.modified.length) console.log("ex modif:", JSON.stringify(diff.modified[0].changes.slice(0,2)));
+if(diff.added.length) console.log("ex ajouté:", diff.added[0].description, "/", diff.added[0].serial_nr);

@@ -4,7 +4,7 @@
     {
       "name": "dev",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "source ~/.nvm/nvm.sh; nvm use 20; npm run dev"],
+      "runtimeArgs": ["-lc", "source ~/.nvm/nvm.sh; nvm use 24 >/dev/null 2>&1; npm run dev"],
       "port": 6001,
       "autoPort": false
     }
