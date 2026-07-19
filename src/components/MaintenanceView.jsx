@@ -1,3 +1,4 @@
+// MaintenanceView v7.1 — maintenance module
 import React, { useState, useEffect, useMemo } from "react";
 import {
   getInventaireDocuments, getInventaireItems, getMaintenances,

@@ -1,3 +1,4 @@
+// InventoryView v7.1 — inventory module
 import React, { useState, useEffect, useMemo } from "react";
 import { getInventaireDocuments, getInventaireItems, getInventaireStats } from "../supabase.js";
 import { Btn, Inp, Sel, Spinner } from "./common/UI.jsx";

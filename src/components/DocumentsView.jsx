@@ -1,3 +1,4 @@
+// DocumentsView v7.1 — documents module
 import React, { useState, useEffect, useMemo } from "react";
 import {
   getInventaireDocuments, upsertInventaireDocument, deleteInventaireDocument,

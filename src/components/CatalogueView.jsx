@@ -1,3 +1,4 @@
+// CatalogueView v7.1 — catalogue module
 import React, { useState, useEffect, useMemo } from "react";
 import { getCataloguePieces } from "../supabase.js";
 import { Btn, Inp, Sel, Spinner } from "./common/UI.jsx";
