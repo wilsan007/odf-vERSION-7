@@ -8,6 +8,7 @@ import {
   updatePort 
 } from "../supabase.js";
 import { Bdg, Spinner, Btn, Sel, Inp } from "./common/UI.jsx";
+import { formatPortLabel } from "../utils/portLabel.js";
 
 const STATUTS = ["LIBRE", "OCCUPE", "MAUVAIS", "INCONNU"];
 
@@ -156,7 +157,7 @@ export default function ODFPanel({ t, TH }) {
                 <div 
                   key={p.id} 
                   onClick={() => setSelPort(p)}
-                  title={`${p.slot_port || p.id} — ${st}`}
+                  title={`${formatPortLabel(p.id)} — ${st}`}
                   style={{
                     background: c.bg, 
                     border: `1px solid ${c.bd}`, 
@@ -171,7 +172,7 @@ export default function ODFPanel({ t, TH }) {
                   <div 
                     className="font-mono" 
                     style={{ fontSize: "11px", fontWeight: 600, color: c.tx }}>
-                    {p.slot_port || p.id}
+                    {formatPortLabel(p.id)}
                   </div>
                   <Bdg status={st} TH={TH} />
                   {p.type_port && (
@@ -269,7 +270,7 @@ function PortDrawer({ port, onClose, onSave, t, TH }) {
           <div 
             className="font-mono" 
             style={{ fontWeight: 700, color: TH.text1, fontSize: "14px" }}>
-            {port.slot_port || port.id}
+            {formatPortLabel(port.id)}
           </div>
           <div style={{ color: TH.text2, fontSize: "11px" }}>
             {t.portDrawerTitle} — <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "10px" }}>{port.id}</span>{port.type_port ? ` · ${port.type_port === "DUPLEX" ? "Duplex" : "Simplex"}` : ""}

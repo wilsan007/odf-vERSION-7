@@ -3,6 +3,7 @@ import { supabase } from "../../supabase.js";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import Papa from "papaparse";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 function Sel({ value, onChange, children, TH, style = {}, disabled = false }) {
   return (
@@ -164,20 +165,8 @@ export function ConnectionManager({
   };
 
   const getPortDisplay = (port) => {
-    if (!port || !port.slots) return "—";
-    const slot = port.slots;
-    const odf = slot.odfs;
-    const rack = odf?.racks;
-    const salle = rack?.salles;
-    const site = salle?.sites;
-    const parts = [
-      site?.id || "",
-      salle?.name || "",
-      rack?.name || "",
-      odf?.name || "",
-      port.slot_port || ""
-    ].filter(Boolean);
-    return parts.join("-");
+    if (!port || !port.id) return "—";
+    return formatPortLabel(port.id);
   };
 
   const getPortPaths = (cable, pNum) => {
@@ -191,7 +180,7 @@ export function ConnectionManager({
       const rack = odf?.racks;
       const salle = rack?.salles;
       const site = salle?.sites;
-      pathSrc = `${site?.name || "Site"} / Salle ${salle?.name || "Salle"} / ${rack?.name || "Rack"} / ${odf?.name || "ODF"} / Slot ${slot?.name || "Slot"} / Port ${slot?.name || "Slot"}P${pStr}`;
+      pathSrc = `${site?.name || "Site"} / Salle ${salle?.name || "Salle"} / ${rack?.name || "Rack"} / ${odf?.name || "ODF"} / Slot ${slot?.name || "Slot"} / Port ${formatPortLabel(src.id.replace(/P\d+$/, `P${pStr}`))}`;
     }
 
     const dst = cable.port_dest;
@@ -202,7 +191,7 @@ export function ConnectionManager({
       const rack = odf?.racks;
       const salle = rack?.salles;
       const site = salle?.sites;
-      pathDst = `${site?.name || "Site"} / Salle ${salle?.name || "Salle"} / ${rack?.name || "Rack"} / ${odf?.name || "ODF"} / Slot ${slot?.name || "Slot"} / Port ${slot?.name || "Slot"}P${pStr}`;
+      pathDst = `${site?.name || "Site"} / Salle ${salle?.name || "Salle"} / ${rack?.name || "Rack"} / ${odf?.name || "ODF"} / Slot ${slot?.name || "Slot"} / Port ${formatPortLabel(dst.id.replace(/P\d+$/, `P${pStr}`))}`;
     }
 
     return { src: pathSrc, dst: pathDst };
@@ -281,7 +270,7 @@ export function ConnectionManager({
     return item.cable_reference || "";
   };
 
-  const buildPortChemin = (port, slotPort) => {
+  const buildPortChemin = (port, portId) => {
     if (!port || !port.slots) return "—";
     const slot  = port.slots;
     const odf   = slot.odfs;
@@ -294,7 +283,7 @@ export function ConnectionManager({
       rack?.name  || "",
       odf?.name   || "",
       slot?.name  ? `Slot ${slot.name}` : "",
-      slotPort    ? `Port ${slotPort}` : ""
+      portId      ? `Port ${formatPortLabel(portId)}` : ""
     ].filter(Boolean).join(" / ");
   };
 
@@ -317,8 +306,8 @@ export function ConnectionManager({
         const dstSlotIds = cableList.map(gc => gc.port_dest?.slot_id).filter(Boolean);
         if (srcSlotIds.length && dstSlotIds.length) {
           const [srcRes, dstRes] = await Promise.all([
-            supabase.from("ports").select("slot_id, slot_port, statut, cid").in("slot_id", srcSlotIds).order("slot_port"),
-            supabase.from("ports").select("slot_id, slot_port, statut, cid").in("slot_id", dstSlotIds).order("slot_port")
+            supabase.from("ports").select("id, slot_id, slot_port, statut, cid").in("slot_id", srcSlotIds).order("slot_port"),
+            supabase.from("ports").select("id, slot_id, slot_port, statut, cid").in("slot_id", dstSlotIds).order("slot_port")
           ]);
           const srcData = srcRes.data || [];
           const dstData = dstRes.data || [];
@@ -330,10 +319,10 @@ export function ConnectionManager({
               const dp = dstPorts[i];
               portRows.push([
                 sp?.cid || "—",
-                buildPortChemin(gc.port_source, sp?.slot_port),
+                buildPortChemin(gc.port_source, sp?.id),
                 sp?.statut || "—",
                 "→",
-                buildPortChemin(gc.port_dest, dp?.slot_port),
+                buildPortChemin(gc.port_dest, dp?.id),
                 dp?.statut || "—",
               ]);
             }
@@ -344,8 +333,8 @@ export function ConnectionManager({
         const dstSlotId = item.port_dest?.slot_id;
         if (srcSlotId && dstSlotId) {
           const [srcRes, dstRes] = await Promise.all([
-            supabase.from("ports").select("slot_port, statut, cid").eq("slot_id", srcSlotId).order("slot_port"),
-            supabase.from("ports").select("slot_port, statut, cid").eq("slot_id", dstSlotId).order("slot_port")
+            supabase.from("ports").select("id, slot_port, statut, cid").eq("slot_id", srcSlotId).order("slot_port"),
+            supabase.from("ports").select("id, slot_port, statut, cid").eq("slot_id", dstSlotId).order("slot_port")
           ]);
           const srcPorts = srcRes.data || [];
           const dstPorts = dstRes.data || [];
@@ -354,10 +343,10 @@ export function ConnectionManager({
             const dp = dstPorts[i];
             portRows.push([
               sp?.cid || "—",
-              buildPortChemin(item.port_source, sp?.slot_port),
+              buildPortChemin(item.port_source, sp?.id),
               sp?.statut || "—",
               "→",
-              buildPortChemin(item.port_dest, dp?.slot_port),
+              buildPortChemin(item.port_dest, dp?.id),
               dp?.statut || "—",
             ]);
           }

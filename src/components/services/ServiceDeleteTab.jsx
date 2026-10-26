@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { supabase, deleteService, deleteServiceJonctions, addHistory } from "../../supabase.js";
 import { Btn, Inp, Modal } from "../common/UI.jsx";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SERVICE DELETE TAB — onglet de suppression de service
@@ -216,7 +217,7 @@ export function ServiceDeleteTab({ services, routes, user, userLabel, onDeleted,
           <DetailRow label="Client" value={selected.clients?.nom} TH={TH} />
           <DetailRow label="Fournisseur" value={selected.fournisseurs?.nom} TH={TH} />
           <DetailRow label="Source (câble)" value={selected.cables_fibre ? `${selected.cables_fibre.cable_reference}${selected.cables_fibre.nom ? " — " + selected.cables_fibre.nom : ""}` : null} TH={TH} />
-          <DetailRow label="Port d'entrée" value={selected.ports?.slot_port} TH={TH} />
+          <DetailRow label="Port d'entrée" value={formatPortLabel(selected.ports?.id)} TH={TH} />
           <DetailRow label="Capacité" value={selected.capacite_gbps != null ? `${selected.capacite_gbps} Gbps` : null} TH={TH} />
           <DetailRow label="Jonctions" value={selected.service_jonctions?.length || 0} TH={TH} />
 

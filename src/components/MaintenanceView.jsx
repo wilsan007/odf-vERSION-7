@@ -7,6 +7,7 @@ import {
 } from "../supabase.js";
 import { Btn, Inp, Sel, Spinner, Modal, Field, Confirm } from "./common/UI.jsx";
 import { exportCSV } from "./common/Utilities.js";
+import { formatPortLabel } from "../utils/portLabel.js";
 import MaintenanceCalendar from "./maintenance/Calendar.jsx";
 
 const NA = new Set(["", "N/A", "NA", "UNAVAIL", "NONE", "-"]);
@@ -328,7 +329,7 @@ export default function MaintenanceView({ t, TH, user }) {
                               <td style={{ padding: "7px 12px", color: TH.cyan, whiteSpace: "nowrap" }} className="font-mono">{rv(it.serial_nr) || "—"}</td>
                               <td style={{ padding: "7px 12px" }}><span style={{ background: TH.blueGlow, color: TH.blue, borderRadius: "5px", padding: "1px 7px", fontSize: "10.5px", fontWeight: 700 }}>{it.categorie}</span></td>
                               <td style={{ padding: "7px 12px", color: loc ? TH.text2 : TH.text3, maxWidth: "220px" }}>{loc || <span style={{ fontStyle: "italic" }}>Non localisé</span>}</td>
-                              <td style={{ padding: "7px 12px", color: it.port_id ? TH.text2 : TH.text3, whiteSpace: "nowrap" }} className="font-mono">{it.port_id || "—"}</td>
+                              <td style={{ padding: "7px 12px", color: it.port_id ? TH.text2 : TH.text3, whiteSpace: "nowrap" }} className="font-mono">{formatPortLabel(it.port_id) || "—"}</td>
                               <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>
                                 <Btn onClick={() => openLoc(it)} variant="ghost" size="sm" TH={TH}>📍 Localiser</Btn>{" "}
                                 <Btn onClick={() => openMaint(it)} variant="outline" size="sm" TH={TH}>🔧 Planifier</Btn>
@@ -406,7 +407,7 @@ export default function MaintenanceView({ t, TH, user }) {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", marginTop: "6px", color: TH.text3, fontSize: "12px" }}>
                     <span>🏢 {m.station || "—"}</span>
                     {m.assigne && <span>👤 {m.assigne}</span>}
-                    {m.port_id && <span className="font-mono">🔌 {m.port_id}</span>}
+                    {m.port_id && <span className="font-mono">🔌 {formatPortLabel(m.port_id)}</span>}
                     {m.service_cid && <span style={{ color: TH.orange, fontWeight: 600 }}>⚡ CID {m.service_cid} — impact service !</span>}
                     {m.date_realisee && <span style={{ color: TH.green }}>✓ réalisé le {m.date_realisee}</span>}
                   </div>

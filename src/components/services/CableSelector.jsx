@@ -1,4 +1,5 @@
 import React from "react";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CABLE SELECTOR — liste de câbles disponibles entre deux sites
@@ -45,9 +46,9 @@ export function CableSelector({ cablesDispos, selectedCableId, onSelect, TH }) {
                 )}
               </div>
               <div style={{ fontSize: "10px", color: TH.text3, fontFamily: "'JetBrains Mono', monospace" }}>
-                Port Source : {c.portEntree}
+                Port Source : {formatPortLabel(c.portEntree)}
                 <span style={{ margin: "0 6px", color: TH.text3 }}>›</span>
-                Port Destination : {c.portSortie}
+                Port Destination : {formatPortLabel(c.portSortie)}
               </div>
             </div>
           </div>

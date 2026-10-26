@@ -1,4 +1,6 @@
-export const fmt = (d) => d 
+import { formatPortLabel } from "../../utils/portLabel.js";
+
+export const fmt = (d) => d
   ? new Date(d).toLocaleDateString("fr-DJ", {
       day: "2-digit",
       month: "2-digit",
@@ -53,11 +55,10 @@ export const exportPDFLabels = (ports) => {
         p.slots?.odfs?.racks?.salles?.name,
         p.slots?.odfs?.racks?.name,
         p.slots?.odfs?.name,
-        p.slots?.name,
-        p.slot_port
+        p.slots?.name
       ].filter(Boolean).join("/");
       return `<div class="label print-label">
-        <div class="label-id">${p.slot_port || p.id}</div>
+        <div class="label-id">${formatPortLabel(p.id)}</div>
         <div class="label-row"><span>${p.owner || '—'}</span><span class="st ${p.statut}">${p.statut}</span></div>
         <div>CID: ${p.cid || '—'}</div>
         <div>OT: ${p.ot_num || '—'}</div>

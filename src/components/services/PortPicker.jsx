@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Sel } from "../common/UI.jsx";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PORT PICKER — sélection en cascade Site → Salle → Rack → ODF → Port
@@ -110,7 +111,7 @@ export function PortPicker({ value, onChange, ports, TH, accent }) {
         <option value="">{odfId ? "— Port —" : "· choisir un ODF"}</option>
         {portList.map(p => (
           <option key={p.id} value={p.id}>
-            {p.slot_port || p.id}
+            {formatPortLabel(p.id)}
             {p.statut && p.statut !== "LIBRE" ? ` · ${p.statut}` : ""}
           </option>
         ))}

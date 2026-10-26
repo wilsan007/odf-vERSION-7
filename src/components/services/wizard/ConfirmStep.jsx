@@ -1,6 +1,7 @@
 import React from "react";
 import { Btn } from "../../common/UI.jsx";
 import { RoutePathDisplay } from "../RoutePathDisplay.jsx";
+import { formatPortLabel } from "../../../utils/portLabel.js";
 
 export function ConfirmStep({
   pathSites,
@@ -60,7 +61,7 @@ export function ConfirmStep({
         {hops.filter(Boolean).map((h, i) => (
           <Row
             key={i}
-            value={`${h.portEntree} › ${h.portSortie}`}
+            value={`${formatPortLabel(h.portEntree)} › ${formatPortLabel(h.portSortie)}`}
           />
         ))}
       </div>

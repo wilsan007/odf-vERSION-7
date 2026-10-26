@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getCables, getPortsFlat, createCable, deleteCable } from "../supabase.js";
 import { Btn, Inp, Sel, Modal, Confirm, Spinner } from "./common/UI.jsx";
+import { formatPortLabel } from "../utils/portLabel.js";
 
 export default function CablesView({ t, TH }) {
   const [cables, setCables] = useState([]);
@@ -144,7 +145,7 @@ export default function CablesView({ t, TH }) {
                   <option value="">— Sélectionner port —</option>
                   {ports.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.slot_port || p.id} ({p.slots?.odfs?.name || p.odf_id})
+                      {formatPortLabel(p.id)}
                     </option>
                   ))}
                 </Sel>

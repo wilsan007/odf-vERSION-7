@@ -2,6 +2,7 @@ import React from "react";
 import { Btn, Sel } from "../../common/UI.jsx";
 import { RoutePathDisplay } from "../RoutePathDisplay.jsx";
 import { MATCH_LABELS } from "../routingEngine.js";
+import { formatPortLabel } from "../../../utils/portLabel.js";
 import { getJarretieresCandidates } from "../ServiceWizard.jsx";
 
 export function HopStep({
@@ -11,6 +12,7 @@ export function HopStep({
   hops,
   loadingHopPorts,
   availablePortOptions,
+  odfFiltreLabel,
   transitReco,
   transitPorts,
   transitLoading,
@@ -55,13 +57,15 @@ export function HopStep({
     onSelectCable(n, modifiedCable);
   };
 
-  const formatPortDisplay = (pid) => {
-    if (!pid) return "";
-    return pid.replace('_', '-');
-  };
+  const formatPortDisplay = formatPortLabel;
 
   const selectedHop = hops[n] || {};
   const portTransitIn = n > 0 ? (hops[n - 1]?.portSortie || null) : null;
+
+  // Liste vide : la cause est soit l'ODF choisi, soit le site entier
+  const messageAucunPort = odfFiltreLabel
+    ? `Aucun port libre sur l'ODF ${odfFiltreLabel}. Revenez à l'étape précédente pour choisir un autre ODF.`
+    : `Erreur : Tous les ports de destination sur ${siteName(toSite)} sont occupés.`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -103,13 +107,13 @@ export function HopStep({
               </option>
               {availablePortOptions.map(opt => (
                 <option key={opt.portEntree} value={opt.portEntree}>
-                  {formatPortDisplay(opt.portEntree)} (via {opt.cable_reference})
+                  {formatPortDisplay(opt.portEntree)}
                 </option>
               ))}
             </Sel>
             {availablePortOptions.length === 0 && !loadingHopPorts && (
               <div style={{ background: "rgba(248,113,113,.12)", border: "1px solid rgba(248,113,113,.3)", borderRadius: "8px", padding: "10px 14px", color: "#F87171", fontSize: "12px", marginTop: "10px" }}>
-                Erreur : Tous les ports de destination sur {siteName(toSite)} sont occupés.
+                {messageAucunPort}
               </div>
             )}
           </div>
@@ -511,13 +515,13 @@ export function HopStep({
               </option>
               {availablePortOptions.map(opt => (
                 <option key={opt.portEntree} value={opt.portEntree}>
-                  {formatPortDisplay(opt.portEntree)} (via {opt.cable_reference})
+                  {formatPortDisplay(opt.portEntree)}
                 </option>
               ))}
             </Sel>
             {availablePortOptions.length === 0 && !loadingHopPorts && (
               <div style={{ background: "rgba(248,113,113,.12)", border: "1px solid rgba(248,113,113,.3)", borderRadius: "8px", padding: "10px 14px", color: "#F87171", fontSize: "12px", marginTop: "10px" }}>
-                Erreur : Tous les ports de destination sur {siteName(toSite)} sont occupés.
+                {messageAucunPort}
               </div>
             )}
             {selectedHop.portSortie && (
@@ -590,7 +594,7 @@ export function HopStep({
                         .sort((a, b) => Math.abs(pNum(a.id) - refNum) - Math.abs(pNum(b.id) - refNum));
                       const renderOpt = (p) => {
                         const entry = transitReco.find(r => r.portInterne.id === p.id);
-                        const lbl = p.id;
+                        const lbl = formatPortDisplay(p.id);
                         const hint = entry ? ` — ${MATCH_LABELS[entry.matchType]}` : '';
                         return <option key={p.id} value={p.id} style={{ fontWeight: entry ? 700 : 400 }}>{lbl}{hint}</option>;
                       };
@@ -650,7 +654,7 @@ export function HopStep({
           onClick={() => onNextHop(n)}
           disabled={
             n === 0
-              ? !selectedHop.cableId
+              ? (!selectedHop.cableId || !selectedHop.portEntree)
               : (
                   !selectedHop.cableId ||
                   !selectedHop.portEntree ||

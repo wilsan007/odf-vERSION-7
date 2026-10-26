@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase, getSites, getRacks, getEquipements, getEquipementSlots } from "../../supabase.js";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 function Sel({ value, onChange, children, TH, style = {}, disabled = false }) {
   return (
@@ -112,7 +113,7 @@ export function EquipementSelector({ label, color, onChange, TH }) {
           <Label TH={TH}>Port libre</Label>
           <Sel value={port} onChange={setPort} TH={TH} disabled={!slot}>
             <option value="">{slot ? "— Sélectionner un port —" : "— Sélectionner un slot d'abord —"}</option>
-            {ports.map(p => <option key={p.id} value={p.id}>{p.slot_port}</option>)}
+            {ports.map(p => <option key={p.id} value={p.id}>{formatPortLabel(p.id)}</option>)}
           </Sel>
         </div>
       </div>

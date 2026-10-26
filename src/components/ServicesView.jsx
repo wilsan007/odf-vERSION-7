@@ -247,6 +247,7 @@ export default function ServicesView({ t, TH, user }) {
               sites={sitesList}
               cables={cablesInterSites}
               fournisseurs={fournisseurs}
+              onFournisseurAdded={(f) => setFournisseurs(prev => [...prev, f].sort((x, y) => x.nom.localeCompare(y.nom)))}
               clients={clients}
               userLabel={userLabel}
               TH={TH}

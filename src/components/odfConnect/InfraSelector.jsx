@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase, getSites, getSalles, getRacks, getOdfs, getSlots } from "../../supabase.js";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 function Sel({ value, onChange, children, TH, style = {}, disabled = false }) {
   return (
@@ -41,7 +42,7 @@ function SlotPortPreview({ slotId, label, color, TH }) {
             borderRadius: "4px", fontWeight: 600,
             background: p.statut === "LIBRE" ? "rgba(16,185,129,.15)" : p.statut === "OCCUPE" ? "rgba(248,113,113,.15)" : "rgba(251,191,36,.15)",
             color: p.statut === "LIBRE" ? "#34D399" : p.statut === "OCCUPE" ? "#F87171" : "#FBBF24",
-          }}>{p.slot_port}</span>
+          }}>{formatPortLabel(p.id)}</span>
         ))}
       </div>
       <div style={{ fontSize: "10px", color: TH.text3, marginTop: "6px" }}>
@@ -359,7 +360,7 @@ export function InfraSelector({
             <Label TH={TH}>Port libre</Label>
             <Sel value={selectedPort} onChange={setSelectedPort} TH={TH} disabled={!odf}>
               <option value="">{odf ? "— Sélectionner un port —" : "— Sélectionner un ODF d'abord —"}</option>
-              {freePorts.map(p => <option key={p.id} value={p.id}>{p.slot_port}</option>)}
+              {freePorts.map(p => <option key={p.id} value={p.id}>{formatPortLabel(p.id)}</option>)}
             </Sel>
             {odf && freePorts.length === 0 && (
               <div style={{ marginTop: "8px", fontSize: "11px", color: TH.text3 }}>⚠ Aucun port libre dans cet ODF.</div>

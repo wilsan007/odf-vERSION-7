@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getPortsFlat } from "../supabase.js";
 import { Spinner } from "./common/UI.jsx";
+import { formatPortLabel } from "../utils/portLabel.js";
 import { fmt } from "./common/Utilities.js";
 
 export default function AlertsView({ t, TH }) {
@@ -45,7 +46,7 @@ export default function AlertsView({ t, TH }) {
               borderRadius: "10px", 
               padding: "14px 16px"
             }}>
-            <div className="font-mono" style={{ fontWeight: 700, color: c.tx, marginBottom: "4px" }}>{p.slot_port || p.id}</div>
+            <div className="font-mono" style={{ fontWeight: 700, color: c.tx, marginBottom: "4px" }}>{formatPortLabel(p.id)}</div>
             <div style={{ color: TH.text2, fontSize: "11px" }}>
               {[
                 p.slots?.odfs?.racks?.sites?.name,

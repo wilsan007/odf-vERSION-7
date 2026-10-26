@@ -82,7 +82,7 @@ export const getJarretieresCandidates = (portA, portB, internalCables, portSalle
 // SERVICE WIZARD
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseurs, clients, userLabel, TH, t }) {
+export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseurs, onFournisseurAdded, clients, userLabel, TH, t }) {
   const [step, setStep] = useState("SELECT_SITES");
   const [currentHopIdx, setCurrentHopIdx] = useState(0);
 
@@ -93,6 +93,14 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
   const [salleB, setSalleB] = useState("");
   const [sallesA, setSallesA] = useState([]);
   const [sallesB, setSallesB] = useState([]);
+  const [rackA, setRackA] = useState("");
+  const [rackB, setRackB] = useState("");
+  const [odfA, setOdfA] = useState("");
+  const [odfB, setOdfB] = useState("");
+  const [racksA, setRacksA] = useState([]);
+  const [racksB, setRacksB] = useState([]);
+  const [odfsA, setOdfsA] = useState([]);
+  const [odfsB, setOdfsB] = useState([]);
   const [transitDataA, setTransitDataA] = useState(null);
   const [transitDataB, setTransitDataB] = useState(null);
   const [intersalleRecoA, setIntersalleRecoA] = useState([]);
@@ -140,6 +148,8 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
       setLoadingHopPorts(false);
       setSalleA(""); setSalleB("");
       setSallesA([]); setSallesB([]);
+      setRackA(""); setRackB(""); setOdfA(""); setOdfB("");
+      setRacksA([]); setRacksB([]); setOdfsA([]); setOdfsB([]);
       setTransitDataA(null); setTransitDataB(null);
       setIntersalleRecoA([]); setIntersalleRecoB([]);
       
@@ -153,14 +163,31 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
     }
   }, [open]);
 
-  // Charger les salles pour siteA et siteB
+  // Charger les salles, racks et ODF pour siteA et siteB
+  const loadRacksAndOdfs = (siteId, setRacks, setOdfs) => {
+    // Vider d'abord : sans ça, les racks/ODF de l'ancien site restent proposés pendant le chargement
+    setRacks([]);
+    setOdfs([]);
+    supabase.from('racks').select('id, name, salle_id').eq('site_id', siteId).order('name')
+      .then(r => {
+        const racks = r.data || [];
+        setRacks(racks);
+        const rackIds = racks.map(x => x.id);
+        if (rackIds.length === 0) { setOdfs([]); return; }
+        supabase.from('odfs').select('id, name, rack_id').in('rack_id', rackIds).order('name')
+          .then(o => setOdfs(o.data || []));
+      });
+  };
+
   useEffect(() => {
     if (siteA) {
       supabase.from('salles').select('id, name').eq('site_id', siteA).order('name')
         .then(r => setSallesA(r.data || []));
+      loadRacksAndOdfs(siteA, setRacksA, setOdfsA);
       getTransitData(siteA).then(data => setTransitDataA(data));
     } else {
       setSallesA([]); setSalleA(""); setTransitDataA(null);
+      setRacksA([]); setRackA(""); setOdfsA([]); setOdfA("");
     }
   }, [siteA]);
 
@@ -168,9 +195,11 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
     if (siteB) {
       supabase.from('salles').select('id, name').eq('site_id', siteB).order('name')
         .then(r => setSallesB(r.data || []));
+      loadRacksAndOdfs(siteB, setRacksB, setOdfsB);
       getTransitData(siteB).then(data => setTransitDataB(data));
     } else {
       setSallesB([]); setSalleB(""); setTransitDataB(null);
+      setRacksB([]); setRackB(""); setOdfsB([]); setOdfB("");
     }
   }, [siteB]);
 
@@ -505,7 +534,7 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
 
     setLoadingHopPorts(true);
     supabase.from("ports")
-      .select("id, slot_id, slot_port, statut")
+      .select("id, slot_id, slot_port, statut, odf_id")
       .in("slot_id", Array.from(slotIds))
       .then(r => {
         setHopPorts(r.data || []);
@@ -536,16 +565,22 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
   const availablePortOptions = useMemo(() => {
     if (activeHopIdx === null || activeCablesDispos.length === 0) return [];
     
-    const getPortNumber = (portStr) => {
-      if (!portStr) return 0;
-      const m = portStr.match(/P(\d+)$/);
-      return m ? parseInt(m[1], 10) : 0;
+    // Position d'un port dans son ODF, en numérique : S01P02 < S01P12 < S02P01
+    const portPos = (portStr) => {
+      const m = portStr?.match(/_S(\d+)P(\d+)$/);
+      return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : [0, 0];
     };
 
     const portMap = {};
     (hopPorts || []).forEach(p => {
       portMap[p.id] = p;
     });
+
+    // ODF choisi à l'étape "sites" : départ sur le 1er saut, arrivée sur le dernier
+    const isFirstHop = activeHopIdx === 0;
+    const isLastHop = activeHopIdx === pathSites.length - 2;
+    const odfFilterSrc = isFirstHop ? odfA : null;
+    const odfFilterDst = isLastHop ? odfB : null;
 
     const list = [];
     activeCablesDispos.forEach(c => {
@@ -561,6 +596,9 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
         const portSrc = portMap[pIdSrc];
         const portDst = portMap[pIdDst];
 
+        if (odfFilterSrc && portSrc?.odf_id !== odfFilterSrc) continue;
+        if (odfFilterDst && portDst?.odf_id !== odfFilterDst) continue;
+
         if (portSrc && portDst && portSrc.statut === "LIBRE" && portDst.statut === "LIBRE") {
           list.push({
             cable: c,
@@ -572,15 +610,33 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
       }
     });
 
+    // Tri croissant (slot puis port) : le premier élément est celui que l'auto-sélection prend
     list.sort((a, b) => {
-      const portNumA = getPortNumber(a.portEntree);
-      const portNumB = getPortNumber(b.portEntree);
-      if (portNumA !== portNumB) return portNumA - portNumB;
+      const [slotA, portA] = portPos(a.portEntree);
+      const [slotB, portB] = portPos(b.portEntree);
+      if (slotA !== slotB) return slotA - slotB;
+      if (portA !== portB) return portA - portB;
       return a.cable_reference.localeCompare(b.cable_reference);
     });
 
     return list;
-  }, [activeHopIdx, activeCablesDispos, hopPorts]);
+  }, [activeHopIdx, activeCablesDispos, hopPorts, odfA, odfB, pathSites]);
+
+  // Libellé de l'ODF qui filtre les ports du saut actif (pour le message « aucun port libre »)
+  const odfFiltreLabel = useMemo(() => {
+    if (activeHopIdx === null) return null;
+    const libelle = (odf, racks, site) =>
+      `${siteName(site)} · ${(racks || []).find(r => r.id === odf.rack_id)?.name ?? "?"} · ${odf.name}`;
+    if (activeHopIdx === 0 && odfA) {
+      const odf = odfsA.find(o => o.id === odfA);
+      if (odf) return libelle(odf, racksA, siteA);
+    }
+    if (activeHopIdx === pathSites.length - 2 && odfB) {
+      const odf = odfsB.find(o => o.id === odfB);
+      if (odf) return libelle(odf, racksB, siteB);
+    }
+    return null;
+  }, [activeHopIdx, odfA, odfB, odfsA, odfsB, racksA, racksB, siteA, siteB, pathSites]);
 
   // Auto-select first available port if none is selected
   useEffect(() => {
@@ -956,6 +1012,18 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
             setSalleB={setSalleB}
             sallesA={sallesA}
             sallesB={sallesB}
+            rackA={rackA}
+            setRackA={setRackA}
+            rackB={rackB}
+            setRackB={setRackB}
+            odfA={odfA}
+            setOdfA={setOdfA}
+            odfB={odfB}
+            setOdfB={setOdfB}
+            racksA={racksA}
+            racksB={racksB}
+            odfsA={odfsA}
+            odfsB={odfsB}
             sites={sites}
             pathSites={pathSites}
             noPath={noPath}
@@ -984,6 +1052,8 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
             setErr={setErr}
             onNextFournisseur={onNextFournisseur}
             siteName={siteName}
+            onFournisseurAdded={onFournisseurAdded}
+            userLabel={userLabel}
           />
         );
       case "SELECT_CLIENT":
@@ -1037,6 +1107,7 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
               hops={hops}
               loadingHopPorts={loadingHopPorts}
               availablePortOptions={availablePortOptions}
+              odfFiltreLabel={odfFiltreLabel}
               transitReco={transitReco}
               transitPorts={transitPorts}
               transitLoading={transitLoading}
