@@ -1,5 +1,9 @@
-# Déploiement : ./deploy-fly.sh  (voir ce script pour la clé publique Supabase)
-app = 'odf-manager'          # à changer si ce nom est déjà pris sur Fly
+# fly.toml app configuration file generated for odf-manager on 2026-10-26T17:48:09Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'odf-manager'
 primary_region = 'cdg'
 
 [build]
