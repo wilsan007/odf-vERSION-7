@@ -3,15 +3,48 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 
-export const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+// ─── Entreprise (tenant) active ──────────────────────────────────────────────
+// Envoyée dans l'en-tête `x-tenant-id` de chaque requête. Côté base,
+// current_tenant_id() la valide contre tenant_members : un en-tête forgé vers
+// une entreprise dont on n'est pas membre ne donne accès à rien.
+let activeTenantId = null
+export const setActiveTenant = (id) => { activeTenantId = id || null }
+
+const tenantFetch = (input, init = {}) => {
+  if (!activeTenantId) return fetch(input, init)
+  const headers = new Headers(init.headers || {})
+  headers.set('x-tenant-id', activeTenantId)
+  return fetch(input, { ...init, headers })
+}
+
+export const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { fetch: tenantFetch },
+})
 
 // ─── Auth helpers ────────────────────────────────────────────────────────────
 export const signIn = (email, password) =>
   supabase.auth.signInWithPassword({ email, password })
 
-export const signOut = () => supabase.auth.signOut()
+export const signOut = () => {
+  setActiveTenant(null)
+  return supabase.auth.signOut()
+}
 
 export const getSession = () => supabase.auth.getSession()
+
+// ─── Multi-tenant : entreprises & membres (RPC SECURITY DEFINER) ─────────────
+export const getMyTenants = () => supabase.rpc('my_tenants')
+
+export const getTenantMembers = () => supabase.rpc('tenant_members_list')
+
+export const addTenantMember = (email, role) =>
+  supabase.rpc('tenant_member_add', { p_email: email, p_role: role })
+
+export const setTenantMemberRole = (userId, role) =>
+  supabase.rpc('tenant_member_set_role', { p_user_id: userId, p_role: role })
+
+export const removeTenantMember = (userId) =>
+  supabase.rpc('tenant_member_remove', { p_user_id: userId })
 
 // ─── Sites ───────────────────────────────────────────────────────────────────
 // id  : 'RDK', 'YAC', ...
@@ -84,6 +117,92 @@ export const createSlot = (data) =>
 export const deleteSlot = (id) =>
   supabase.from('slots').delete().eq('id', id)
 
+// ─── Technologies réseau (WDM, SDH, OTN…) ────────────────────────────────────
+export const getTechnologies = () =>
+  supabase.from('technologies').select('id, name, description').order('ordre')
+
+// ─── Catalogue des modèles de cartes ─────────────────────────────────────────
+export const getCarteModeles = (technologieId) => {
+  let q = supabase
+    .from('carte_modeles')
+    .select('id, nom, fabricant, technologie_id, ports_count, description')
+    .order('fabricant').order('nom')
+  if (technologieId) q = q.eq('technologie_id', technologieId)
+  return q
+}
+
+export const createCarteModele = (data) =>
+  supabase.from('carte_modeles').insert(data).select().single()
+
+// ─── Cartes physiques (stock / installées) ────────────────────────────────────
+export const getCartes = (etat) => {
+  let q = supabase
+    .from('cartes')
+    .select('*, carte_modeles(nom, fabricant, technologie_id, ports_count)')
+    .order('created_at', { ascending: false })
+  if (etat) q = q.eq('etat', etat)
+  return q
+}
+
+export const createCarte = (data) =>
+  supabase.from('cartes').insert(data).select('id').single()
+
+export const updateCarte = (id, data) =>
+  supabase.from('cartes').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+// ─── Lots de réception ────────────────────────────────────────────────────────
+export const getLots = () =>
+  supabase.from('lots').select('*, fournisseurs(nom)').order('date_reception', { ascending: false })
+
+export const createLot = (data) =>
+  supabase.from('lots').insert(data).select().single()
+
+// ─── Équipements actifs (CIENA/TEJAS…) ───────────────────────────────────────
+// id  : 'RDK-R1-EQ1', ...
+export const getEquipements = (rackId) => {
+  let q = supabase.from('equipements')
+    .select('*, racks(name, sites(name))')
+    .order('name')
+  if (rackId) q = q.eq('rack_id', rackId)
+  return q
+}
+
+export const createEquipement = (data) =>
+  supabase.from('equipements').insert(data).select().single()
+
+export const deleteEquipement = (id) =>
+  supabase.from('equipements').delete().eq('id', id)
+
+// ─── Slots équipement ────────────────────────────────────────────────────────
+// id  : 'RDK-R1-EQ1_SL05', ... (ports_count variable, contrairement aux slots ODF)
+export const getEquipementSlots = (equipementId) => {
+  let q = supabase.from('equipement_slots').select('*').order('slot_num')
+  if (equipementId) q = q.eq('equipement_id', equipementId)
+  return q
+}
+
+export const createEquipementSlot = (data) =>
+  supabase.from('equipement_slots').insert(data).select().single()
+
+export const deleteEquipementSlot = (id) =>
+  supabase.from('equipement_slots').delete().eq('id', id)
+
+// ─── Ports équipement ─────────────────────────────────────────────────────────
+// id        : 'RDK-R1-EQ1_SL05P11', ...
+// slot_port : 'SL05P11'
+export const getEquipementPorts = (slotId) => {
+  let q = supabase.from('equipement_ports').select('*').order('slot_port')
+  if (slotId) q = q.eq('slot_id', slotId)
+  return q
+}
+
+export const getEquipementPortsByEquipement = (equipementId) =>
+  supabase.from('equipement_ports').select('*, equipement_slots(name, slot_num)')
+    .eq('equipement_id', equipementId).order('slot_port')
+
+export const updateEquipementPort = (id, data) =>
+  supabase.from('equipement_ports').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
 // ─── Ports ───────────────────────────────────────────────────────────────────
 // id        : 'RDK-R1-ODF1_S01P01', ...
 // slot_port : 'S01P01'
@@ -138,6 +257,14 @@ export const createClient = (data) =>
 
 export const deleteClient = (id) =>
   supabase.from('clients').delete().eq('id', id)
+
+// ─── Types de service (v16) ───────────────────────────────────────────────────
+// id : 'BACKBONE', 'TRANSIT-IP'… ; liste gérable depuis le wizard de service
+export const getTypesService = () =>
+  supabase.from('types_service').select('*').order('nom')
+
+export const createTypeService = (data) =>
+  supabase.from('types_service').insert(data).select().single()
 
 // ─── Câbles Fibre (capacité) ───────────────────────────────────────────────────
 export const getCables = () =>
@@ -199,25 +326,6 @@ export const checkTopologie = async () => {
   return { ok, liaisons: list }
 }
 
-// ─── Jarretières (cordons de brassage internes à un site) ──────────────────────
-// L'id est auto-généré ('{site}-JARNN') par le trigger trg_jarretiere_id si omis.
-export const getJarretieres = () =>
-  supabase.from('jarretieres').select(`
-    *,
-    sites(id, name),
-    port_a:ports!jarretieres_port_a_id_fkey(id, slot_port),
-    port_b:ports!jarretieres_port_b_id_fkey(id, slot_port)
-  `).order('id')
-
-export const createJarretiere = (data) =>
-  supabase.from('jarretieres').insert(data).select().single()
-
-export const updateJarretiere = (id, data) =>
-  supabase.from('jarretieres').update(data).eq('id', id).select().single()
-
-export const deleteJarretiere = (id) =>
-  supabase.from('jarretieres').delete().eq('id', id)
-
 // ─── Services ──────────────────────────────────────────────────────────────────
 // La capacité est gérée automatiquement par le trigger trg_service_capacity.
 // createService peut échouer si la capacité disponible du câble est insuffisante.
@@ -265,6 +373,151 @@ export const addHistory = (data) =>
 
 export const getHistory = (limit = 100) =>
   supabase.from('history').select('*').order('created_at', { ascending: false }).limit(limit)
+
+// ─── Inventaire d'actifs / As-Built (module v10) ─────────────────────────────
+// Documents (une révision d'inventaire par station)
+export const getInventaireDocuments = () =>
+  supabase.from('inventaire_documents').select('*').order('station')
+
+// Upsert d'un document (remplace la révision existante du même id)
+export const upsertInventaireDocument = (data) =>
+  supabase.from('inventaire_documents')
+    .upsert({ ...data, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id,id' })
+    .select().single()
+
+export const deleteInventaireDocument = (id) =>
+  supabase.from('inventaire_documents').delete().eq('id', id)
+
+// Items d'inventaire — filtrés par station (chaque station < 250 lignes,
+// on reste donc sous la limite max_rows de PostgREST)
+export const getInventaireItems = (station) => {
+  let q = supabase.from('inventaire_items').select('*').order('id')
+  if (station) q = q.eq('station', station)
+  return q
+}
+
+// Items d'un document précis (une révision) — pour la comparaison inter-révisions
+export const getInventaireItemsByDocument = (documentId) =>
+  supabase.from('inventaire_items').select('*').eq('document_id', documentId).order('id')
+
+// Statistiques agrégées par station (vue → contourne max_rows)
+export const getInventaireStats = () =>
+  supabase.from('vue_inventaire_stats').select('*').order('station')
+
+// Catalogue matériel : références dédoublonnées (module B / vue v12)
+export const getCataloguePieces = () =>
+  supabase.from('vue_catalogue_pieces').select('*').order('part_number')
+
+// ─── Localisation & Maintenance (module E / v13) ─────────────────────────────
+// Met à jour la localisation physique + le port relié d'une pièce d'inventaire
+export const updateItemLocation = (id, data) =>
+  supabase.from('inventaire_items')
+    .update({ ...data, emp_updated_at: new Date().toISOString() })
+    .eq('id', id).select().single()
+
+// Résout le service (CID) desservi par un port ODF donné.
+// Cherche : service.port_id → jonction (entrée/sortie) → port.cid en dernier recours.
+export const getServiceForPort = async (portId) => {
+  if (!portId) return { data: null }
+  const s1 = await supabase.from('services')
+    .select('cid, label, statut').eq('port_id', portId).limit(1)
+  if (s1.data && s1.data.length) return { data: s1.data[0] }
+
+  const j = await supabase.from('service_jonctions')
+    .select('service_id').or(`port_entree_id.eq.${portId},port_sortie_id.eq.${portId}`).limit(1)
+  if (j.data && j.data.length) {
+    const s2 = await supabase.from('services')
+      .select('cid, label, statut').eq('id', j.data[0].service_id).limit(1)
+    if (s2.data && s2.data.length) return { data: s2.data[0] }
+  }
+
+  const p = await supabase.from('ports').select('cid, statut').eq('id', portId).limit(1)
+  if (p.data && p.data.length && p.data[0].cid) return { data: { cid: p.data[0].cid, label: null, statut: p.data[0].statut } }
+  return { data: null }
+}
+
+// Maintenances (vue enrichie : pièce + retard calculé)
+export const getMaintenances = () =>
+  supabase.from('vue_maintenances').select('*').order('date_prevue')
+
+// Uniquement les maintenances ouvertes (pour badges/signalement) — colonnes légères
+export const getOpenMaintenances = () =>
+  supabase.from('maintenances').select('id, item_id, statut, date_prevue, type, priorite')
+    .in('statut', ['PLANIFIE', 'EN_COURS'])
+
+export const createMaintenance = (data) =>
+  supabase.from('maintenances').insert(data).select().single()
+
+export const updateMaintenance = (id, data) =>
+  supabase.from('maintenances').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+export const deleteMaintenance = (id) =>
+  supabase.from('maintenances').delete().eq('id', id)
+
+// Supprime tous les items d'un document (avant réimport de la même révision)
+export const deleteInventaireItemsByDocument = (documentId) =>
+  supabase.from('inventaire_items').delete().eq('document_id', documentId)
+
+// Insertion en lot par paquets de 500 (évite les payloads trop volumineux)
+export const bulkInsertInventaireItems = async (rows) => {
+  const CHUNK = 500
+  let inserted = 0
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const slice = rows.slice(i, i + CHUNK)
+    const { error } = await supabase.from('inventaire_items').insert(slice)
+    if (error) return { error, inserted }
+    inserted += slice.length
+  }
+  return { error: null, inserted }
+}
+
+// Import complet d'un document parsé : upsert doc → purge items → réinsertion
+export const importInventaireDocument = async ({ document, items }) => {
+  const { error: docErr } = await upsertInventaireDocument(document)
+  if (docErr) return { error: docErr, inserted: 0 }
+  const { error: delErr } = await deleteInventaireItemsByDocument(document.id)
+  if (delErr) return { error: delErr, inserted: 0 }
+  return bulkInsertInventaireItems(items)
+}
+
+// ─── Topologie DARE1 : Segments / Line Pairs (module v11) ────────────────────
+export const getTopoSegments = () =>
+  supabase.from('topo_segments').select('*').order('systeme').order('nom')
+
+export const createTopoSegment = (data) =>
+  supabase.from('topo_segments').insert(data).select().single()
+
+export const updateTopoSegment = (id, data) =>
+  supabase.from('topo_segments').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+export const deleteTopoSegment = (id) =>
+  supabase.from('topo_segments').delete().eq('id', id)
+
+export const getTopoLinePairs = (segmentId) => {
+  let q = supabase.from('topo_line_pairs').select('*').order('numero')
+  if (segmentId) q = q.eq('segment_id', segmentId)
+  return q
+}
+
+export const createTopoLinePair = (data) =>
+  supabase.from('topo_line_pairs').insert(data).select().single()
+
+export const updateTopoLinePair = (id, data) =>
+  supabase.from('topo_line_pairs').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+
+export const deleteTopoLinePair = (id) =>
+  supabase.from('topo_line_pairs').delete().eq('id', id)
+
+// Upsert en lot (utilisé par « Générer depuis l'inventaire »)
+export const upsertTopoSegments = (rows) =>
+  supabase.from('topo_segments').upsert(rows, { onConflict: 'tenant_id,id', ignoreDuplicates: true }).select()
+
+export const upsertTopoLinePairs = (rows) =>
+  supabase.from('topo_line_pairs').upsert(rows, { onConflict: 'tenant_id,id', ignoreDuplicates: true }).select()
+
+// Pont : ce qui est réellement installé, agrégé par (station, segment, line_pair)
+export const getTopoInventaire = () =>
+  supabase.from('vue_topo_inventaire').select('*').order('station')
 
 // ─── Stats dashboard ─────────────────────────────────────────────────────────
 // Statistiques agrégées par site via vue_stats_par_site (contourne max_rows=1000)
@@ -354,8 +607,8 @@ export const getSitePorts = async (siteId) => {
 // Retourne pour un site donné :
 //   - internalPorts : ports sur ODF INTERNE (iODF), enrichis avec odf_type/rack_id/salle_id
 //   - externalPorts : ports sur ODF EXTERNE du site
-//   - jarretieres   : câbles JARRETIERE dont les deux ports sont sur ce site
-// ─── Résolution salle_id en lot (pour le wizard : décider JARRETIERE vs INTERNE) ─────────
+//   - cablesInternes : câbles INTERNE dont les deux ports sont sur ce site
+// ─── Résolution salle_id en lot (pour le wizard : déterminer la portée d'une connexion INTERNE) ─────────
 // Retourne un Map portId → salle_id en 3 requêtes optimisées (IN) quel que soit le nombre de ports.
 // Si un port n'a pas de salle associée, sa valeur est null.
 export const getSalleIdsForPorts = async (portIds) => {
@@ -392,76 +645,18 @@ export const getSalleIdsForPorts = async (portIds) => {
 };
 
 export const getTransitData = async (siteId) => {
-  const empty = { internalPorts: [], externalPorts: [], jarretieres: [] };
+  const empty = { internalPorts: [], externalPorts: [], cablesInternes: [] };
 
-  const { data: racks, error: rErr } = await supabase
-    .from('racks')
-    .select('id, salle_id')
-    .eq('site_id', siteId);
-  if (rErr || !racks?.length) return empty;
+  const { data, error } = await supabase.rpc('get_transit_data', { p_site_id: siteId });
+  if (error || !data) return empty;
 
-  const rackIds = racks.map(r => r.id);
-  const rackSalleMap = Object.fromEntries(racks.map(r => [r.id, r.salle_id]));
-
-  const { data: odfs } = await supabase
-    .from('odfs')
-    .select('id, name, odf_type, rack_id')
-    .in('rack_id', rackIds);
-  if (!odfs?.length) return empty;
-
-  const odfMap = Object.fromEntries(odfs.map(o => [o.id, o]));
-  const internalOdfIds = odfs.filter(o => o.odf_type === 'INTERNE').map(o => o.id);
-  const externalOdfIds = odfs.filter(o => o.odf_type === 'EXTERNE').map(o => o.id);
-
-  const { data: slots } = await supabase
-    .from('slots')
-    .select('id, odf_id, slot_num')
-    .in('odf_id', odfs.map(o => o.id));
-  if (!slots?.length) return empty;
-
-  const slotMap = Object.fromEntries(slots.map(s => [s.id, s]));
-  const internalSlotIds = new Set(slots.filter(s => internalOdfIds.includes(s.odf_id)).map(s => s.id));
-  const externalSlotIds = new Set(slots.filter(s => externalOdfIds.includes(s.odf_id)).map(s => s.id));
-  const allSlotIds = slots.map(s => s.id);
-
-  const [portsRes, jarRes] = await Promise.all([
-    supabase.from('ports')
-      .select('id, slot_port, statut, slot_id, odf_id')
-      .in('slot_id', allSlotIds)
-      .order('id'),
-    supabase.from('cables_fibre')
-      .select('id, port_source_id, port_dest_id')
-      // Inclure INTERNE (intersalle et même salle) — ce sont les connexions locales
-      .in('type_lien', ['INTERNE']),
-
-  ]);
-
-  const allPorts = portsRes.data || [];
-  const allPortIds = new Set(allPorts.map(p => p.id));
-
-  const jarretieres = (jarRes.data || []).filter(
-    j => allPortIds.has(j.port_source_id) && allPortIds.has(j.port_dest_id)
-  );
-
-  const enrichPort = (p) => {
-    const slot = slotMap[p.slot_id];
-    const odf  = slot ? odfMap[slot.odf_id] : null;
-    return {
-      ...p,
-      odf_type: odf?.odf_type || 'EXTERNE',
-      odf_name: odf?.name     || '',
-      rack_id:  odf?.rack_id  || null,
-      salle_id: odf ? rackSalleMap[odf.rack_id] || null : null,
-      slot_num: slot?.slot_num || 0,
-    };
-  };
-
-  const enriched = allPorts.map(enrichPort);
+  const ports = data.ports || [];
+  const cablesInternes = data.cables || [];
 
   return {
-    internalPorts: enriched.filter(p => internalSlotIds.has(p.slot_id)),
-    externalPorts: enriched.filter(p => externalSlotIds.has(p.slot_id)),
-    jarretieres,
+    internalPorts: ports.filter(p => p.odf_type === 'INTERNE'),
+    externalPorts: ports.filter(p => p.odf_type === 'EXTERNE'),
+    cablesInternes,
   };
 };
 

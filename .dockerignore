@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+.env.*
+.git
+.claude
+.gstack
+scratch
+supabase
+*.xlsx
+*.sql
+*.py
+*.mjs
+*.cjs
+check-*.mjs

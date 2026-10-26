@@ -1,5 +1,6 @@
 import React from "react";
 import { Bdg } from "../common/UI.jsx";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 const fmt = d => d 
   ? new Date(d).toLocaleDateString("fr-DJ", { 
@@ -169,7 +170,7 @@ export function PortTable({
                     color: TH.text1, 
                     fontWeight: 600 
                   }}>
-                    {p.slot_port}
+                    {formatPortLabel(p.id)}
                   </td>
                   <td style={{ padding: "9px 12px" }}>
                     <Bdg status={p.statut} TH={TH} />
@@ -318,7 +319,7 @@ export function PortTable({
               color: TH.text1, 
               fontWeight: 600 
             }}>
-              {p.slot_port}
+              {formatPortLabel(p.id)}
             </td>
             <td style={{ padding: "9px 12px" }}>
               <Bdg status={p.statut} TH={TH} />

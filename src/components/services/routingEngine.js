@@ -30,7 +30,7 @@ export const siteFromPortId = (portId) => {
 export const MATCH_LABELS = {
   PERFECT_MATCH:   '✦ Parfait — chaîne entrant→iODF→sortant vérifiée',
   CHAIN_CONFIRMED: '★ Recommandé — chemin complet vérifié',
-  DIRECT_JAR:      '◆ Brassage direct depuis port entrant',
+  DIRECT_INT:      '◆ Brassage direct depuis port entrant',
   ROUTE_TO_C:      '◇ Sortie vers destination disponible',
   HAS_EXTERNAL:    '○ Port interne avec connexion externe',
   FREE_INTERNAL:   '  Port interne libre',
@@ -45,7 +45,7 @@ export const MATCH_LABELS = {
  * @param {string}   params.portEntreeB        - ID du port de sortie sélectionné (vers hop suivant)
  * @param {Array}    params.internalPorts      - Ports internes (iODF) du site de transit
  * @param {Array}    params.externalPorts      - Ports externes (ODF) du site de transit
- * @param {Array}    params.jarretieres        - Jarretières existantes
+ * @param {Array}    params.cablesInternes     - Câbles internes (INTERNE) existants
  * @param {Array}    params.cablesExterneB     - Câbles externes vers le site C suivant
  * @returns {Array}  Candidats triés par score (le meilleur en premier)
  */
@@ -54,7 +54,7 @@ export function findBestInternalPort({
   portEntreeB,
   internalPorts,
   externalPorts,
-  jarretieres,
+  cablesInternes,
   cablesExterneB,
 }) {
   const portNum = (id) => {
@@ -66,13 +66,13 @@ export function findBestInternalPort({
     return m ? parseInt(m[1], 10) : 0;
   };
 
-  // Index des jarretières : portId → [portId voisin, ...]
-  const jarIndex = {};
-  jarretieres.forEach(j => {
-    if (!jarIndex[j.port_source_id]) jarIndex[j.port_source_id] = [];
-    if (!jarIndex[j.port_dest_id])   jarIndex[j.port_dest_id]   = [];
-    jarIndex[j.port_source_id].push(j.port_dest_id);
-    jarIndex[j.port_dest_id].push(j.port_source_id);
+  // Index des câbles internes : portId → [portId voisin, ...]
+  const intIndex = {};
+  cablesInternes.forEach(j => {
+    if (!intIndex[j.port_source_id]) intIndex[j.port_source_id] = [];
+    if (!intIndex[j.port_dest_id])   intIndex[j.port_dest_id]   = [];
+    intIndex[j.port_source_id].push(j.port_dest_id);
+    intIndex[j.port_dest_id].push(j.port_source_id);
   });
 
   // Ports externes qui ont une sortie vers le site C
@@ -88,26 +88,26 @@ export function findBestInternalPort({
   const freePorts = internalPorts.filter(p => p.statut !== 'OCCUPE');
 
   freePorts.forEach(portInterne => {
-    const jarNeighbors        = jarIndex[portInterne.id] || [];
-    const directJarIn         = (jarIndex[portTransitIn] || []).includes(portInterne.id);
-    const directJarOut        = portEntreeB ? jarNeighbors.includes(portEntreeB) : false;
-    const externalNeighbors   = jarNeighbors.filter(pid => externalPortMap[pid]);
+    const intNeighbors        = intIndex[portInterne.id] || [];
+    const directIntIn         = (intIndex[portTransitIn] || []).includes(portInterne.id);
+    const directIntOut        = portEntreeB ? intNeighbors.includes(portEntreeB) : false;
+    const externalNeighbors   = intNeighbors.filter(pid => externalPortMap[pid]);
     const externalWithRouteToC = externalNeighbors.filter(pid => portsExterneAvecSortieC.has(pid));
 
     const distPort = Math.abs(portNum(portInterne.id) - refPortNum);
     const distSlot = Math.abs(slotNum(portInterne.id) - refSlotNum);
 
     let matchType, score;
-    if (directJarIn && directJarOut) {
+    if (directIntIn && directIntOut) {
       matchType = 'PERFECT_MATCH';
       score = -1 + distPort * 0.01 + distSlot * 0.001;
-    } else if (directJarIn && externalWithRouteToC.length > 0) {
+    } else if (directIntIn && externalWithRouteToC.length > 0) {
       matchType = 'CHAIN_CONFIRMED';
       score = 0 + distPort * 0.1 + distSlot * 0.01;
-    } else if (directJarIn) {
-      matchType = 'DIRECT_JAR';
+    } else if (directIntIn) {
+      matchType = 'DIRECT_INT';
       score = 1 + distPort * 0.1 + distSlot * 0.01;
-    } else if (directJarOut) {
+    } else if (directIntOut) {
       matchType = 'ROUTE_TO_C';
       score = 5 + distPort * 0.1 + distSlot * 0.01;
     } else if (externalWithRouteToC.length > 0) {
@@ -122,7 +122,7 @@ export function findBestInternalPort({
     }
 
     let resolvedExternalPort = null;
-    if (portEntreeB && directJarOut) {
+    if (portEntreeB && directIntOut) {
       resolvedExternalPort = externalPortMap[portEntreeB];
     } else if (externalWithRouteToC.length > 0) {
       resolvedExternalPort = externalPortMap[externalWithRouteToC[0]];
@@ -138,6 +138,103 @@ export function findBestInternalPort({
       ? a.score - b.score
       : portNum(a.portInterne.id) - portNum(b.portInterne.id)
   );
+  return candidates;
+}
+
+/**
+ * Trouve les câbles intersalle existants entre deux salles d'un même site.
+ *
+ * @param {object} params
+ * @param {Array}  params.internalPorts   - Ports internes (iODF) enrichis avec salle_id
+ * @param {Array}  params.cablesInternes  - Câbles INTERNES du site
+ * @param {string} params.salleIn         - salle_id de la salle d'arrivée
+ * @param {string} params.salleOut        - salle_id de la salle de départ
+ * @returns {Array}  Câbles intersalle (source dans salleIn, dest dans salleOut ou inverse)
+ */
+export function findIntersalleCables({ internalPorts, externalPorts, cablesInternes, salleIn, salleOut }) {
+  if (!salleIn || !salleOut || salleIn === salleOut) return [];
+  const allPorts = [...(internalPorts || []), ...(externalPorts || [])];
+  const portSalleMap = Object.fromEntries(allPorts.map(p => [p.id, p.salle_id]));
+  return cablesInternes.filter(c => {
+    const sSalle = portSalleMap[c.port_source_id];
+    const dSalle = portSalleMap[c.port_dest_id];
+    return (sSalle === salleIn && dSalle === salleOut) || (sSalle === salleOut && dSalle === salleIn);
+  });
+}
+
+/**
+ * Trouve le meilleur transit intersalle sur un site de transit où
+ * le port d'arrivée et le port de sortie sont dans des salles différentes.
+ *
+ * Cherche un port interne dans la salle d'arrivée (portTransitMid) connecté
+ * via un câble intersalle existant à un port interne dans la salle de départ
+ * (portTransitMid2), puis une jarretière intrasalle de portTransitMid2 vers
+ * le port de sortie externe (portEntreeB).
+ *
+ * @param {object} params
+ * @param {string}   params.portTransitIn      - ID du port d'entrée (ODF externe, salleIn)
+ * @param {string}   params.portEntreeB        - ID du port de sortie (ODF externe, salleOut)
+ * @param {Array}    params.internalPorts      - Ports internes (iODF) enrichis avec salle_id
+ * @param {Array}    params.externalPorts      - Ports externes (ODF) enrichis avec salle_id
+ * @param {Array}    params.cablesInternes     - Câbles INTERNES existants
+ * @param {string}   params.salleIn            - salle_id du port d'arrivée
+ * @param {string}   params.salleOut           - salle_id du port de sortie
+ * @returns {Array}  Candidats triés par score : { portTransitMid, portTransitMid2, intersalleCable, score }
+ */
+export function findBestIntersalleTransit({
+  portTransitIn,
+  portEntreeB,
+  internalPorts,
+  externalPorts,
+  cablesInternes,
+  salleIn,
+  salleOut,
+}) {
+  if (!salleIn || !salleOut || salleIn === salleOut) return [];
+
+  const portNum = (id) => {
+    const m = (id || '').match(/P(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  const slotNum = (id) => {
+    const m = (id || '').match(/S(\d+)P/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+
+  const allPorts = [...(internalPorts || []), ...(externalPorts || [])];
+  const portSalleMap = Object.fromEntries(allPorts.map(p => [p.id, p.salle_id]));
+
+  const intersalleCables = findIntersalleCables({ internalPorts, externalPorts, cablesInternes, salleIn, salleOut });
+
+  const refPortNumIn = portNum(portTransitIn);
+  const refSlotNumIn = slotNum(portTransitIn);
+  const refPortNumOut = portNum(portEntreeB);
+  const refSlotNumOut = slotNum(portEntreeB);
+
+  const candidates = [];
+
+  for (const cable of intersalleCables) {
+    const srcSalle = portSalleMap[cable.port_source_id];
+    const isSrcInSalleIn = srcSalle === salleIn;
+    const midId  = isSrcInSalleIn ? cable.port_source_id : cable.port_dest_id;
+    const mid2Id = isSrcInSalleIn ? cable.port_dest_id   : cable.port_source_id;
+
+    const distPortIn  = Math.abs(portNum(midId)  - refPortNumIn);
+    const distSlotIn  = Math.abs(slotNum(midId)  - refSlotNumIn);
+    const distPortOut = Math.abs(portNum(mid2Id) - refPortNumOut);
+    const distSlotOut = Math.abs(slotNum(mid2Id) - refSlotNumOut);
+
+    const score = distPortIn + distSlotIn * 0.1 + distPortOut + distSlotOut * 0.1;
+
+    candidates.push({
+      portTransitMid: midId,
+      portTransitMid2: mid2Id,
+      intersalleCable: cable,
+      score,
+    });
+  }
+
+  candidates.sort((a, b) => a.score - b.score);
   return candidates;
 }
 

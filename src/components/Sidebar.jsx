@@ -7,6 +7,11 @@ const NAV_ITEMS = [
   { key: "manage",     icon: "🏗" },
   { key: "odfConnect", icon: "🔗" },
   { key: "services",   icon: "⚡" },
+  { key: "inventory",  icon: "📦" },
+  { key: "topology",   icon: "🌐" },
+  { key: "documents",  icon: "📄" },
+  { key: "catalogue",  icon: "🗂" },
+  { key: "maintenance", icon: "🔧" },
 ];
 
 export default function Sidebar({
@@ -18,11 +23,16 @@ export default function Sidebar({
   setLang, 
   theme, 
   setTheme, 
-  t, 
-  TH, 
-  user, 
-  onLogout, 
-  alertCount
+  t,
+  TH,
+  user,
+  tenant,
+  tenants,
+  onSwitchTenant,
+  isAdmin,
+  onLogout,
+  alertCount,
+  maintAlert
 }) {
   return (
     <div style={{
@@ -66,6 +76,26 @@ export default function Sidebar({
                 <span style={{ color: "#3B82F6", fontWeight: 600 }}>({user.role || "user"})</span>
               </div>
             )}
+            {tenant && (tenants?.length > 1 ? (
+              <select
+                value={tenant.tenant_id}
+                onChange={e => onSwitchTenant(e.target.value)}
+                title="Entreprise active"
+                style={{
+                  marginTop: "6px", width: "100%", background: "rgba(255,255,255,0.07)",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "6px",
+                  color: "#E8F0FE", fontSize: "11px", padding: "4px 6px", cursor: "pointer"
+                }}>
+                {tenants.map(x => <option key={x.tenant_id} value={x.tenant_id}>{x.name}</option>)}
+              </select>
+            ) : (
+              <div title="Entreprise active" style={{
+                fontSize: "11px", color: "#E8F0FE", marginTop: "4px", fontWeight: 600,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+              }}>
+                🏢 {tenant.name}
+              </div>
+            ))}
           </>
         )}
         <button 
@@ -93,7 +123,7 @@ export default function Sidebar({
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: "auto", padding: "10px 0" }}>
-        {NAV_ITEMS.map(({ key, icon }) => {
+        {(isAdmin ? [...NAV_ITEMS, { key: "members", icon: "👥" }] : NAV_ITEMS).map(({ key, icon }) => {
           const active = view === key;
           return (
             <button 
@@ -108,8 +138,8 @@ export default function Sidebar({
                 padding: col ? "12px 0" : "9px 0 9px 16px",
                 justifyContent: col ? "center" : "flex-start",
                 background: active ? "rgba(59,130,246,0.14)" : "transparent",
+                borderTop: "none", borderRight: "none", borderBottom: "none",
                 borderLeft: active ? "3px solid #3B82F6" : "3px solid transparent",
-                border: "none", 
                 cursor: "pointer", 
                 transition: "background .12s",
                 position: "relative"
@@ -137,21 +167,21 @@ export default function Sidebar({
                   {t[key]}
                 </span>
               )}
-              {key === "alerts" && alertCount > 0 && (
-                <span style={{
-                  background: "#EF4444", 
-                  color: "#fff", 
+              {key === "maintenance" && maintAlert > 0 && (
+                <span title={`${maintAlert} maintenance(s) en retard`} style={{
+                  background: "#EF4444",
+                  color: "#fff",
                   borderRadius: "10px",
-                  fontSize: "10px", 
-                  fontWeight: 700, 
-                  padding: "1px 6px", 
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  padding: "1px 6px",
                   lineHeight: "16px",
                   position: col ? "absolute" : "static",
-                  top: col ? "6px" : "auto", 
+                  top: col ? "6px" : "auto",
                   right: col ? "6px" : "auto",
-                  marginLeft: col ? "0" : "auto", 
+                  marginLeft: col ? "0" : "auto",
                   marginRight: col ? "0" : "12px"
-                }}>{alertCount}</span>
+                }}>{maintAlert}</span>
               )}
             </button>
           );

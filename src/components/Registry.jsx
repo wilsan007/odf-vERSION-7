@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getPortsFlat, getSites } from "../supabase.js";
 import { Btn, Bdg, Spinner } from "./common/UI.jsx";
+import { formatPortLabel } from "../utils/portLabel.js";
 import { fmt, exportCSV, exportPDFLabels } from "./common/Utilities.js";
 
 const STATUTS = ["LIBRE", "OCCUPE", "MAUVAIS", "INCONNU"];
@@ -227,7 +228,7 @@ export default function Registry({ t, TH, lang }) {
                   fontWeight: 600, 
                   fontSize: "11px" 
                 }}>
-                  {p.slot_port || p.id}
+                  {formatPortLabel(p.id)}
                 </td>
                 <td style={{ padding: "8px 12px" }}>
                   <Bdg status={p.statut || "LIBRE"} TH={TH} />

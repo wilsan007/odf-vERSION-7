@@ -1,6 +1,10 @@
-import React from "react";
-import { Btn, Sel } from "../../common/UI.jsx";
+import React, { useState } from "react";
+import { Btn } from "../../common/UI.jsx";
 import { RoutePathDisplay } from "../RoutePathDisplay.jsx";
+import { NewFournisseurForm } from "./NewFournisseurForm.jsx";
+import { ComboboxCreation } from "./ComboboxCreation.jsx";
+import { creerEnBase } from "./creation.js";
+import { createFournisseur } from "../../../supabase.js";
 
 export function SelectFournisseurStep({
   pathSites,
@@ -18,7 +22,26 @@ export function SelectFournisseurStep({
   setErr,
   onNextFournisseur,
   siteName,
+  onFournisseurAdded,
+  userLabel,
 }) {
+  const [adding, setAdding] = useState(false);
+
+  // Saisie d'un nom absent de la liste : enregistré en base immédiatement, puis sélectionné
+  const creerFournisseur = async (nom) => {
+    const row = await creerEnBase({
+      insert: createFournisseur,
+      nom,
+      existants: fournisseurs,
+      userLabel,
+      designation: "le fournisseur",
+      libelle: "Fournisseur",
+      entite: "fournisseur",
+    });
+    if (onFournisseurAdded) onFournisseurAdded(row);
+    return row;
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
       <RoutePathDisplay
@@ -36,14 +59,41 @@ export function SelectFournisseurStep({
           Fournisseur d'accès (côté {siteName(siteA)})
         </div>
         <div style={{ color: TH.text3, fontSize: "11px", marginBottom: "12px" }}>
-          Sélectionnez l'opérateur qui fournit la capacité sur le câble de départ.
+          Sélectionnez l'opérateur qui fournit la capacité sur le câble de départ, ou ajoutez-en un nouveau.
         </div>
-        <Sel value={fournisseurId} onChange={setFournisseurId} TH={TH}>
-          <option value="">— Sélectionner un fournisseur —</option>
-          {(fournisseurs || []).map(f => (
-            <option key={f.id} value={f.id}>{f.nom} ({f.id})</option>
-          ))}
-        </Sel>
+        <ComboboxCreation
+          items={fournisseurs}
+          value={fournisseurId}
+          onSelect={f => setFournisseurId(f.id)}
+          onCreate={creerFournisseur}
+          placeholder="Rechercher ou saisir un nouveau fournisseur…"
+          TH={TH}
+        />
+
+        {!adding && (
+          <button
+            onClick={() => setAdding(true)}
+            style={{
+              marginTop: "8px", background: "none", border: "none", padding: 0,
+              color: TH.blue, fontSize: "12px", fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            + Ajouter un fournisseur
+          </button>
+        )}
+        {adding && (
+          <NewFournisseurForm
+            fournisseurs={fournisseurs}
+            userLabel={userLabel}
+            TH={TH}
+            onCancel={() => setAdding(false)}
+            onCreated={(row, isNew) => {
+              if (isNew && onFournisseurAdded) onFournisseurAdded(row);
+              setFournisseurId(row.id);
+              setAdding(false);
+            }}
+          />
+        )}
 
         {hops[0]?.cableId && (
           (() => {

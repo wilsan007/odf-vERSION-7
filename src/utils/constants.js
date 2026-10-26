@@ -13,12 +13,6 @@ export const ACCENT = "#E8F4FD";
 export const CAN_EDIT = r => ["admin", "superviseur", "technicien"].includes(r);
 export const CAN_ADMIN = r => ["admin", "superviseur"].includes(r);
 
-export const DEMO_USERS = [
-  { email: "admin@demo.dj", pass: "admin123", name: "Administrateur", role: "admin" },
-  { email: "tech@demo.dj", pass: "tech123", name: "Technicien", role: "technicien" },
-  { email: "lecture@demo.dj", pass: "lecture123", name: "Lecture Seule", role: "lecture" },
-];
-
 export const spKey = (s, p) => `S${String(s).padStart(2, "0")}P${String(p).padStart(2, "0")}`;
 export const tsNow = () => new Date().toISOString();
 export const fmtDt = d => d ? new Date(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";

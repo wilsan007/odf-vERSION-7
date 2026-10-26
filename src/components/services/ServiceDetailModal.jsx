@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal } from "../common/UI.jsx";
 import { fmtDt } from "../../utils/constants";
+import { formatPortLabel } from "../../utils/portLabel.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SERVICE DETAIL MODAL — détail complet d'un service (ouvert au clic sur le CID)
@@ -40,7 +41,7 @@ export function ServiceDetailModal({ service, routeInfo, onClose, TH }) {
         <Row label="Client" value={service.clients?.nom} TH={TH} />
         <Row label="Fournisseur" value={service.fournisseurs?.nom} TH={TH} />
         <Row label="Source (câble)" value={cable ? `${cable.cable_reference}${cable.nom ? " — " + cable.nom : ""} (${cable.type_lien})` : null} TH={TH} />
-        <Row label="Port d'entrée" value={port?.slot_port} TH={TH} />
+        <Row label="Port d'entrée" value={formatPortLabel(port?.id)} TH={TH} />
         <Row label="OT" value={service.ot_num} TH={TH} />
         <Row label="Capacité" value={service.capacite_gbps != null ? `${service.capacite_gbps} Gbps` : null} TH={TH} />
         <Row label="Jonctions" value={nb} TH={TH} />
