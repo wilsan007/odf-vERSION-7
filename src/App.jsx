@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { THEMES, T, BASE_CSS } from "./components/common/Theme.js";
 import { Spinner } from "./components/common/UI.jsx";
-import { supabase, getSession, signOut, getPortsFlat } from "./supabase.js";
+import { supabase, getSession, signOut, getPortsFlat, getMyTenants, setActiveTenant } from "./supabase.js";
 
 import AuthScreen from "./components/AuthScreen.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -19,12 +19,15 @@ import TopologyView from "./components/TopologyView.jsx";
 import DocumentsView from "./components/DocumentsView.jsx";
 import CatalogueView from "./components/CatalogueView.jsx";
 import MaintenanceView from "./components/MaintenanceView.jsx";
+import MembersView from "./components/MembersView.jsx";
 import { getOpenMaintenances } from "./supabase.js";
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [demoUser, setDemoUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  // Multi-tenant : entreprises de l'utilisateur et entreprise active
+  const [tenants, setTenants] = useState(null);
+  const [tenant, setTenant] = useState(null);
   const [lang, setLang] = useState("fr");
   const [theme, setTheme] = useState("dark");
   const [view, setView] = useState("dashboard");
@@ -58,9 +61,32 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Entreprises de l'utilisateur connecté → entreprise active
+  useEffect(() => {
+    if (!session) { setTenants(null); setTenant(null); setActiveTenant(null); return; }
+    getMyTenants().then(({ data }) => {
+      const list = data || [];
+      let last = null;
+      try { last = localStorage.getItem("odf-tenant"); } catch { /* stockage indisponible */ }
+      const pick = list.find(x => x.tenant_id === last) || list[0] || null;
+      setActiveTenant(pick?.tenant_id);
+      setTenants(list);
+      setTenant(pick);
+    });
+  }, [session?.user?.id]);
+
+  const switchTenant = (id) => {
+    const next = (tenants || []).find(x => x.tenant_id === id);
+    if (!next) return;
+    try { localStorage.setItem("odf-tenant", id); } catch { /* stockage indisponible */ }
+    setActiveTenant(id);
+    setTenant(next);
+    setView("dashboard");
+  };
+
   // Alert count
   useEffect(() => {
-    if (!session && !demoUser) return;
+    if (!session || !tenant) return;
     getPortsFlat().then(r => {
       const u = (r.data || []).filter(p => p.statut === "INCONNU").length;
       setAlertCount(u);
@@ -71,14 +97,13 @@ export default function App() {
       const today = new Date().toISOString().slice(0, 10);
       setMaintAlert((r.data || []).filter(m => m.date_prevue < today).length);
     }).catch(() => setMaintAlert(0));
-  }, [session, view, demoUser]);
+  }, [session, view, tenant]);
 
   const doLogout = async () => {
     await signOut();
-    setDemoUser(null);
   };
 
-  if (authLoading) {
+  if (authLoading || (session && tenants === null)) {
     return (
       <div style={{
         height: "100vh",
@@ -92,7 +117,7 @@ export default function App() {
     );
   }
 
-  if (!session && !demoUser) {
+  if (!session) {
     return (
       <AuthScreen
         lang={lang}
@@ -101,22 +126,38 @@ export default function App() {
         setTheme={setTheme}
         t={t}
         TH={TH}
-        onLogin={u => { if (u) setDemoUser(u); }}
+        onLogin={() => {}}
       />
     );
   }
+
+  // Connecté mais rattaché à aucune entreprise : aucun accès aux données
+  if (!tenant) {
+    return (
+      <div style={{ height: "100vh", background: TH.bgBase, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "14px", color: TH.text2, fontSize: "14px", textAlign: "center", padding: "20px" }}>
+        <div className="font-syne" style={{ color: TH.text1, fontSize: "20px", fontWeight: 800 }}>Accès en attente</div>
+        <div>Votre compte ({session.user.email}) n'est rattaché à aucune entreprise.<br />Demandez à un administrateur de vous ajouter.</div>
+        <div><button onClick={doLogout} style={{ background: TH.bgInput, border: `1px solid ${TH.border}`, borderRadius: "8px", padding: "8px 14px", color: TH.text1, cursor: "pointer" }}>{t.logout}</button></div>
+      </div>
+    );
+  }
+
+  const user = { ...session.user, name: session.user.email, role: tenant.role };
+  const isAdmin = tenant.role === "admin";
+  const currentView = view === "members" && !isAdmin ? "dashboard" : view;
 
   const VIEWS = {
     dashboard: <Dashboard t={t} TH={TH} />,
     search: <SearchView t={t} TH={TH} />,
     manage: <ManageInfra t={t} TH={TH} />,
     odfConnect: <OdfConnectView t={t} TH={TH} />,
-    services: <ServicesView t={t} TH={TH} user={session?.user || demoUser} />,
+    services: <ServicesView t={t} TH={TH} user={user} />,
     inventory: <InventoryView t={t} TH={TH} />,
     topology: <TopologyView t={t} TH={TH} />,
     documents: <DocumentsView t={t} TH={TH} />,
     catalogue: <CatalogueView t={t} TH={TH} />,
-    maintenance: <MaintenanceView t={t} TH={TH} user={session?.user || demoUser} />,
+    maintenance: <MaintenanceView t={t} TH={TH} user={user} />,
+    members: <MembersView t={t} TH={TH} user={user} tenant={tenant} />,
   };
 
   const VIEW_TITLES = {
@@ -130,12 +171,13 @@ export default function App() {
     documents: t.documents,
     catalogue: t.catalogue,
     maintenance: t.maintenance,
+    members: t.members,
   };
 
   return (
     <div style={{ display: "flex", height: "100vh", background: TH.bgBase, overflow: "hidden" }}>
       <Sidebar
-        view={view}
+        view={currentView}
         setView={setView}
         col={col}
         setCol={setCol}
@@ -145,15 +187,20 @@ export default function App() {
         setTheme={setTheme}
         t={t}
         TH={TH}
-        user={session?.user || demoUser}
+        user={user}
+        tenant={tenant}
+        tenants={tenants}
+        onSwitchTenant={switchTenant}
+        isAdmin={isAdmin}
         onLogout={doLogout}
         alertCount={alertCount}
         maintAlert={maintAlert}
       />
       <div style={{ flex: 1, display: "flex", flexTriangle: "column", flexDirection: "column", overflow: "hidden" }}>
-        <Topbar title={VIEW_TITLES[view]} t={t} TH={TH} />
-        <div style={{ flex: 1, overflow: "hidden" }}>
-          {VIEWS[view]}
+        <Topbar title={VIEW_TITLES[currentView]} t={t} TH={TH} />
+        {/* key : remonte toutes les vues au changement d'entreprise (aucun état croisé) */}
+        <div key={tenant.tenant_id} style={{ flex: 1, overflow: "hidden" }}>
+          {VIEWS[currentView]}
         </div>
       </div>
     </div>

@@ -26,6 +26,10 @@ export default function Sidebar({
   t,
   TH,
   user,
+  tenant,
+  tenants,
+  onSwitchTenant,
+  isAdmin,
   onLogout,
   alertCount,
   maintAlert
@@ -72,6 +76,26 @@ export default function Sidebar({
                 <span style={{ color: "#3B82F6", fontWeight: 600 }}>({user.role || "user"})</span>
               </div>
             )}
+            {tenant && (tenants?.length > 1 ? (
+              <select
+                value={tenant.tenant_id}
+                onChange={e => onSwitchTenant(e.target.value)}
+                title="Entreprise active"
+                style={{
+                  marginTop: "6px", width: "100%", background: "rgba(255,255,255,0.07)",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "6px",
+                  color: "#E8F0FE", fontSize: "11px", padding: "4px 6px", cursor: "pointer"
+                }}>
+                {tenants.map(x => <option key={x.tenant_id} value={x.tenant_id}>{x.name}</option>)}
+              </select>
+            ) : (
+              <div title="Entreprise active" style={{
+                fontSize: "11px", color: "#E8F0FE", marginTop: "4px", fontWeight: 600,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+              }}>
+                🏢 {tenant.name}
+              </div>
+            ))}
           </>
         )}
         <button 
@@ -99,7 +123,7 @@ export default function Sidebar({
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: "auto", padding: "10px 0" }}>
-        {NAV_ITEMS.map(({ key, icon }) => {
+        {(isAdmin ? [...NAV_ITEMS, { key: "members", icon: "👥" }] : NAV_ITEMS).map(({ key, icon }) => {
           const active = view === key;
           return (
             <button 

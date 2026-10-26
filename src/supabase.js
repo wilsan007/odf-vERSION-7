@@ -3,15 +3,48 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 
-export const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+// ─── Entreprise (tenant) active ──────────────────────────────────────────────
+// Envoyée dans l'en-tête `x-tenant-id` de chaque requête. Côté base,
+// current_tenant_id() la valide contre tenant_members : un en-tête forgé vers
+// une entreprise dont on n'est pas membre ne donne accès à rien.
+let activeTenantId = null
+export const setActiveTenant = (id) => { activeTenantId = id || null }
+
+const tenantFetch = (input, init = {}) => {
+  if (!activeTenantId) return fetch(input, init)
+  const headers = new Headers(init.headers || {})
+  headers.set('x-tenant-id', activeTenantId)
+  return fetch(input, { ...init, headers })
+}
+
+export const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { fetch: tenantFetch },
+})
 
 // ─── Auth helpers ────────────────────────────────────────────────────────────
 export const signIn = (email, password) =>
   supabase.auth.signInWithPassword({ email, password })
 
-export const signOut = () => supabase.auth.signOut()
+export const signOut = () => {
+  setActiveTenant(null)
+  return supabase.auth.signOut()
+}
 
 export const getSession = () => supabase.auth.getSession()
+
+// ─── Multi-tenant : entreprises & membres (RPC SECURITY DEFINER) ─────────────
+export const getMyTenants = () => supabase.rpc('my_tenants')
+
+export const getTenantMembers = () => supabase.rpc('tenant_members_list')
+
+export const addTenantMember = (email, role) =>
+  supabase.rpc('tenant_member_add', { p_email: email, p_role: role })
+
+export const setTenantMemberRole = (userId, role) =>
+  supabase.rpc('tenant_member_set_role', { p_user_id: userId, p_role: role })
+
+export const removeTenantMember = (userId) =>
+  supabase.rpc('tenant_member_remove', { p_user_id: userId })
 
 // ─── Sites ───────────────────────────────────────────────────────────────────
 // id  : 'RDK', 'YAC', ...
@@ -341,7 +374,7 @@ export const getInventaireDocuments = () =>
 // Upsert d'un document (remplace la révision existante du même id)
 export const upsertInventaireDocument = (data) =>
   supabase.from('inventaire_documents')
-    .upsert({ ...data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    .upsert({ ...data, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id,id' })
     .select().single()
 
 export const deleteInventaireDocument = (id) =>
@@ -469,10 +502,10 @@ export const deleteTopoLinePair = (id) =>
 
 // Upsert en lot (utilisé par « Générer depuis l'inventaire »)
 export const upsertTopoSegments = (rows) =>
-  supabase.from('topo_segments').upsert(rows, { onConflict: 'id', ignoreDuplicates: true }).select()
+  supabase.from('topo_segments').upsert(rows, { onConflict: 'tenant_id,id', ignoreDuplicates: true }).select()
 
 export const upsertTopoLinePairs = (rows) =>
-  supabase.from('topo_line_pairs').upsert(rows, { onConflict: 'id', ignoreDuplicates: true }).select()
+  supabase.from('topo_line_pairs').upsert(rows, { onConflict: 'tenant_id,id', ignoreDuplicates: true }).select()
 
 // Pont : ce qui est réellement installé, agrégé par (station, segment, line_pair)
 export const getTopoInventaire = () =>

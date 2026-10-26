@@ -2,11 +2,6 @@ import React, { useState } from "react";
 import { signIn } from "../supabase.js";
 import { Inp, Btn } from "./common/UI.jsx";
 
-export const DEMO_USERS = [
-  { email: "admin@demo.dj", password: "admin123", name: "Administrateur", role: "admin" },
-  { email: "tech@demo.dj",  password: "tech123",  name: "Technicien",     role: "technicien" },
-];
-
 export default function AuthScreen({
   lang, 
   setLang, 
@@ -16,25 +11,20 @@ export default function AuthScreen({
   TH, 
   onLogin
 }) {
-  const [email, setEmail] = useState("admin@demo.dj");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const doLogin = async () => {
-    setLoading(true); 
+    setLoading(true);
     setError("");
-    const demo = DEMO_USERS.find(u => u.email === email && u.password === password);
-    if (demo) { 
-      onLogin(demo); 
-      setLoading(false); 
-      return; 
-    }
-    const { error: err } = await signIn(email, password);
+    const { error: err } = await signIn(email.trim(), password);
     if (err) {
-      setError(err.message);
+      // Message générique : ne révèle pas si le compte existe
+      setError("Identifiants invalides");
     } else {
-      onLogin(null);
+      onLogin();
     }
     setLoading(false);
   };
