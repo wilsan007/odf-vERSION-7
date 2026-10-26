@@ -174,6 +174,11 @@ export default function ODFPanel({ t, TH }) {
                     {p.slot_port || p.id}
                   </div>
                   <Bdg status={st} TH={TH} />
+                  {p.type_port && (
+                    <div title="Paire de fibres TX/RX" style={{ fontSize: "9px", color: TH.text3, letterSpacing: ".3px" }}>
+                      ⇄ {p.type_port === "DUPLEX" ? "Duplex" : "Simplex"}
+                    </div>
+                  )}
                   {p.owner && (
                     <div style={{ 
                       fontSize: "10px", 
@@ -267,7 +272,7 @@ function PortDrawer({ port, onClose, onSave, t, TH }) {
             {port.slot_port || port.id}
           </div>
           <div style={{ color: TH.text2, fontSize: "11px" }}>
-            {t.portDrawerTitle} — <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "10px" }}>{port.id}</span>
+            {t.portDrawerTitle} — <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "10px" }}>{port.id}</span>{port.type_port ? ` · ${port.type_port === "DUPLEX" ? "Duplex" : "Simplex"}` : ""}
           </div>
         </div>
         <button 
