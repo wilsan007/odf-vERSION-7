@@ -1,0 +1,17 @@
+# Déploiement : ./deploy-fly.sh  (voir ce script pour la clé publique Supabase)
+app = 'odf-manager'          # à changer si ce nom est déjà pris sur Fly
+primary_region = 'cdg'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'
