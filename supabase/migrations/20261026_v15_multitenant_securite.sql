@@ -226,48 +226,45 @@ BEGIN
 END;
 $$;
 
--- Ensemble des tables métier : toutes les tables de public sauf la plateforme
-CREATE TEMP TABLE mt_scoped ON COMMIT DROP AS
-SELECT c.oid::regclass AS rel
-FROM pg_class c
-WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
-  AND c.relname NOT IN ('tenants', 'tenant_members', 'platform_admins');
-
 -- ───────────────────────────────────────────────────────────────────────────
--- 4. FK entre tables métier → (tenant_id, col) REFERENCES t(tenant_id, col)
---    On mémorise, on retire, on réécrit PK/UNIQUE, puis on recrée.
+-- 4. Tables métier (toutes celles de public sauf la plateforme) + FK entre
+--    elles → (tenant_id, col) REFERENCES t(tenant_id, col).
+--    Un seul bloc DO, sans table temporaire : l'éditeur SQL Supabase n'exécute
+--    pas forcément le script dans une même session, et le bloc reste atomique.
+--    On mémorise les FK, on les retire, on réécrit PK/UNIQUE, puis on recrée.
 -- ───────────────────────────────────────────────────────────────────────────
-CREATE TEMP TABLE mt_fks ON COMMIT DROP AS
-SELECT c.conrelid::regclass AS rel, c.conname, pg_get_constraintdef(c.oid) AS def
-FROM pg_constraint c
-WHERE c.contype = 'f'
-  AND c.conrelid  IN (SELECT rel FROM mt_scoped)
-  AND c.confrelid IN (SELECT rel FROM mt_scoped)
-  AND pg_get_constraintdef(c.oid) !~ '^FOREIGN KEY \(tenant_id,';
-
-DO $$
-DECLARE r record;
-BEGIN
-  FOR r IN SELECT * FROM mt_fks LOOP
-    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.rel, r.conname);
-  END LOOP;
-END $$;
-
-DO $$
-DECLARE r record;
-BEGIN
-  FOR r IN SELECT rel FROM mt_scoped LOOP
-    PERFORM public.mt_enable_tenant_isolation(r.rel);
-  END LOOP;
-END $$;
-
 DO $$
 DECLARE
-  r      record;
-  v_cols text;
-  v_def  text;
+  v_scoped regclass[];
+  v_fks    jsonb;
+  r        record;
+  v_cols   text;
+  v_def    text;
 BEGIN
-  FOR r IN SELECT * FROM mt_fks LOOP
+  SELECT coalesce(array_agg(c.oid::regclass), '{}') INTO v_scoped
+  FROM pg_class c
+  WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+    AND c.relname NOT IN ('tenants', 'tenant_members', 'platform_admins');
+
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+           'rel', c.conrelid::regclass::text,
+           'conname', c.conname,
+           'def', pg_get_constraintdef(c.oid))), '[]') INTO v_fks
+  FROM pg_constraint c
+  WHERE c.contype = 'f'
+    AND c.conrelid::regclass  = ANY (v_scoped)
+    AND c.confrelid::regclass = ANY (v_scoped)
+    AND pg_get_constraintdef(c.oid) !~ '^FOREIGN KEY \(tenant_id,';
+
+  FOR r IN SELECT * FROM jsonb_to_recordset(v_fks) AS x(rel text, conname text, def text) LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.rel, r.conname);
+  END LOOP;
+
+  FOR i IN 1 .. coalesce(array_length(v_scoped, 1), 0) LOOP
+    PERFORM public.mt_enable_tenant_isolation(v_scoped[i]);
+  END LOOP;
+
+  FOR r IN SELECT * FROM jsonb_to_recordset(v_fks) AS x(rel text, conname text, def text) LOOP
     v_cols := (regexp_match(r.def, '^FOREIGN KEY \(([^)]*)\)'))[1];
     v_def  := regexp_replace(r.def,
                 '^FOREIGN KEY \(([^)]*)\) REFERENCES ([^(]+)\(([^)]*)\)',
