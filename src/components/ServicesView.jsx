@@ -249,6 +249,7 @@ export default function ServicesView({ t, TH, user }) {
               fournisseurs={fournisseurs}
               onFournisseurAdded={(f) => setFournisseurs(prev => [...prev, f].sort((x, y) => x.nom.localeCompare(y.nom)))}
               clients={clients}
+              onClientAdded={(c) => setClients(prev => [...prev, c].sort((x, y) => x.nom.localeCompare(y.nom)))}
               userLabel={userLabel}
               TH={TH}
               t={t}

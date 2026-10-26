@@ -12,6 +12,8 @@ export function ConfirmStep({
   fournisseurs,
   clientId,
   clients,
+  typeServiceId,
+  typesService,
   capacite,
   label,
   saving,
@@ -56,6 +58,7 @@ export function ConfirmStep({
         <Row label="Capacité" value={`${capacite} Gbps`} />
         <Row label="Fournisseur" value={fournisseurNom} />
         <Row label="Client" value={clientNom} />
+        {typeServiceId && <Row label="Type de service" value={(typesService || []).find(t => t.id === typeServiceId)?.nom || typeServiceId} />}
         <Row label="Route" value={pathSites.map(s => siteName(s)).join(" › ")} />
         <Row label="Liaisons" value={hops.filter(Boolean).map(h => h.cable_reference).join(" + ")} />
         {hops.filter(Boolean).map((h, i) => (

@@ -258,6 +258,14 @@ export const createClient = (data) =>
 export const deleteClient = (id) =>
   supabase.from('clients').delete().eq('id', id)
 
+// ─── Types de service (v16) ───────────────────────────────────────────────────
+// id : 'BACKBONE', 'TRANSIT-IP'… ; liste gérable depuis le wizard de service
+export const getTypesService = () =>
+  supabase.from('types_service').select('*').order('nom')
+
+export const createTypeService = (data) =>
+  supabase.from('types_service').insert(data).select().single()
+
 // ─── Câbles Fibre (capacité) ───────────────────────────────────────────────────
 export const getCables = () =>
   supabase.from('cables_fibre').select(`

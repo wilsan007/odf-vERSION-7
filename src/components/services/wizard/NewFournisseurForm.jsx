@@ -1,53 +1,9 @@
 import React, { useState } from "react";
 import { Btn, Inp, Sel } from "../../common/UI.jsx";
-import { createFournisseur, addHistory } from "../../../supabase.js";
+import { createFournisseur } from "../../../supabase.js";
+import { creerEnBase, sameName } from "./creation.js";
 
 const TYPES = ["Opérateur", "Opérateur de gros", "Câble sous-marin", "Terrestre", "Autre"];
-
-// Identifiant lisible déduit du nom (convention de la table : 'SEACOM', 'AAE1'…)
-const slugId = (nom) =>
-  nom.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30) || "FRN";
-const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-// Fournisseur déjà présent du même nom (sans tenir compte de la casse)
-export const trouverFournisseur = (fournisseurs, nom) =>
-  (fournisseurs || []).find(f => sameName(f.nom, nom));
-
-export const messageErreurFournisseur = (error) =>
-  error?.code === "42501"
-    ? "Droits insuffisants : seul un technicien ou un administrateur peut ajouter un fournisseur."
-    : "Impossible d'enregistrer le fournisseur" + (error?.message ? ` (${error.message})` : ".");
-
-/**
- * Enregistre un fournisseur en base et trace l'action dans l'historique.
- * L'id est déduit du nom ; s'il est déjà pris, on essaie un suffixe (-2, -3…).
- * Renvoie { row } en cas de succès, { error } sinon.
- */
-export async function enregistrerFournisseur({ nom, type = TYPES[0], pays = null, fournisseurs, userLabel }) {
-  const name = nom.trim();
-  const taken = new Set((fournisseurs || []).map(f => f.id));
-  const base = slugId(name);
-  let row = null, error = null;
-  for (let i = 1; i <= 5 && !row; i++) {
-    const id = i === 1 ? base : `${base}-${i}`;
-    if (taken.has(id)) continue;
-    const res = await createFournisseur({
-      id, nom: name, type, pays, updated_by: userLabel || null,
-    });
-    if (res.error?.code === "23505") { taken.add(id); continue; }   // id déjà pris : suffixe suivant
-    row = res.data; error = res.error;
-    break;
-  }
-  if (!row) return { error };
-  // Trace d'audit : un échec d'écriture de l'historique ne doit pas bloquer l'ajout
-  try {
-    await addHistory({
-      action: `Fournisseur créé : ${row.nom}`, entity_type: "fournisseur", entity_id: row.id, user_email: userLabel,
-    });
-  } catch { /* ignoré */ }
-  return { row };
-}
 
 /**
  * Ajout d'un fournisseur avec détails (type, pays) : enregistré en base, puis ajouté à la liste
@@ -63,18 +19,24 @@ export function NewFournisseurForm({ fournisseurs, userLabel, onCreated, onCance
   const save = async () => {
     const name = nom.trim();
     if (name.length < 2) { setErr("Saisissez le nom du fournisseur."); return; }
-    const existing = trouverFournisseur(fournisseurs, name);
+    const existing = (fournisseurs || []).find(f => sameName(f.nom, name));
     if (existing) { onCreated(existing, false); return; }
 
     setSaving(true); setErr("");
     try {
-      const { row, error } = await enregistrerFournisseur({
-        nom: name, type, pays: pays.trim() || null, fournisseurs, userLabel,
+      const row = await creerEnBase({
+        insert: createFournisseur,
+        nom: name,
+        existants: fournisseurs,
+        champs: { type, pays: pays.trim() || null },
+        userLabel,
+        designation: "le fournisseur",
+        libelle: "Fournisseur",
+        entite: "fournisseur",
       });
-      if (!row) { setErr(messageErreurFournisseur(error)); return; }
       onCreated(row, true);
     } catch (e) {
-      setErr("Erreur inattendue : " + (e?.message || e));
+      setErr(e.message || "Erreur inattendue.");
     } finally {
       setSaving(false);
     }

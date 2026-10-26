@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { supabase, getTransitData, getSalleIdsForPorts, createService, addServiceJonctions, addHistory } from "../../supabase.js";
+import { supabase, getTransitData, getSalleIdsForPorts, createService, addServiceJonctions, addHistory, getTypesService } from "../../supabase.js";
 import { Modal } from "../common/UI.jsx";
 import { useRouteGraph, findBestInternalPort, findBestIntersalleTransit, genCid } from "./routingEngine.js";
 
@@ -82,7 +82,7 @@ export const getJarretieresCandidates = (portA, portB, internalCables, portSalle
 // SERVICE WIZARD
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseurs, onFournisseurAdded, clients, userLabel, TH, t }) {
+export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseurs, onFournisseurAdded, clients, onClientAdded, userLabel, TH, t }) {
   const [step, setStep] = useState("SELECT_SITES");
   const [currentHopIdx, setCurrentHopIdx] = useState(0);
 
@@ -112,6 +112,8 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
   const [fournisseurId, setFournisseurId] = useState("");
   const [clientId, setClientId] = useState("");
   const [capacite, setCapacite] = useState("10");
+  const [typeServiceId, setTypeServiceId] = useState("");
+  const [typesService, setTypesService] = useState([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [transitPorts, setTransitPorts] = useState([]);
@@ -138,6 +140,8 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
       setFournisseurId("");
       setClientId("");
       setCapacite("10");
+      setTypeServiceId("");
+      getTypesService().then(r => setTypesService(r.data || []));
       setSaving(false);
       setErr("");
       setTransitData(null);
@@ -980,7 +984,8 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
           p_jonctions: jonctions,
           p_history_action: `Service créé via wizard : ${cid} — ${label.trim()} (${siteA}→${siteB})`,
           p_created_by: userLabel || null,
-          p_capacite_gbps: Number(capacite) || 0
+          p_capacite_gbps: Number(capacite) || 0,
+          p_type_service_id: typeServiceId || null
         }
       );
 
@@ -1064,6 +1069,12 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
             clientId={clientId}
             setClientId={setClientId}
             clients={clients}
+            onClientAdded={onClientAdded}
+            typeServiceId={typeServiceId}
+            setTypeServiceId={setTypeServiceId}
+            typesService={typesService}
+            onTypeServiceAdded={(t) => setTypesService(prev => [...prev, t].sort((x, y) => x.nom.localeCompare(y.nom)))}
+            userLabel={userLabel}
             capacite={capacite}
             setCapacite={setCapacite}
             totalHops={totalHops}
@@ -1086,6 +1097,8 @@ export function ServiceWizard({ open, onClose, onDone, sites, cables, fournisseu
             fournisseurs={fournisseurs}
             clientId={clientId}
             clients={clients}
+            typeServiceId={typeServiceId}
+            typesService={typesService}
             capacite={capacite}
             label={label}
             saving={saving}
