@@ -57,10 +57,11 @@ CREATE TABLE IF NOT EXISTS public.platform_admins (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Entreprise historique : toutes les données existantes lui sont rattachées
-INSERT INTO public.tenants (id, name, slug)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Djibouti Telecom', 'djibouti-telecom')
-ON CONFLICT (id) DO NOTHING;
+-- Entreprise historique : toutes les données existantes lui sont rattachées.
+-- UUID aléatoire (gen_random_uuid) ; on la retrouve toujours par son slug.
+INSERT INTO public.tenants (name, slug)
+VALUES ('Djibouti Telecom', 'djibouti-telecom')
+ON CONFLICT (slug) DO NOTHING;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 2. Résolution du tenant / du rôle (SECURITY DEFINER, search_path vide)
@@ -160,7 +161,7 @@ BEGIN
   -- a) colonne, rattachement des lignes existantes, défaut, NOT NULL, FK tenants
   --    (défaut constant à l'ajout : pas d'UPDATE, donc aucun trigger métier déclenché)
   EXECUTE format('ALTER TABLE %s ADD COLUMN IF NOT EXISTS tenant_id uuid NOT NULL DEFAULT %L',
-                 v_rel, '00000000-0000-0000-0000-000000000001');
+                 v_rel, (SELECT id::text FROM public.tenants WHERE slug = 'djibouti-telecom'));
   EXECUTE format('ALTER TABLE %s ALTER COLUMN tenant_id SET DEFAULT public.current_tenant_id()', v_rel);
   EXECUTE format('ALTER TABLE %s ALTER COLUMN tenant_id SET NOT NULL', v_rel);
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
@@ -555,6 +556,6 @@ NOTIFY pgrst, 'reload schema';
 --   SELECT id FROM auth.users WHERE email = 'ton-email@exemple.com'
 --   ON CONFLICT DO NOTHING;
 -- INSERT INTO public.tenant_members (tenant_id, user_id, role)
---   SELECT '00000000-0000-0000-0000-000000000001', id, 'admin'
+--   SELECT (SELECT id FROM public.tenants WHERE slug = 'djibouti-telecom'), id, 'admin'
 --   FROM auth.users WHERE email = 'ton-email@exemple.com'
 --   ON CONFLICT DO NOTHING;
